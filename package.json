@@ -1,0 +1,49 @@
+{
+  "name": "os-mock-mcp-demo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build:core && npm run build:web && npm run build:mcp",
+    "build:core": "tsup packages/core/src/index.ts --format esm --dts --out-dir packages/core/dist",
+    "build:web": "vite build --config packages/web/vite.config.ts",
+    "build:mcp": "tsup packages/mcp-server/src/index.ts --format esm --target node20 --out-dir packages/mcp-server/dist",
+    "dev:mcp": "tsx packages/mcp-server/src/index.ts",
+    "dev:web": "vite --config packages/web/vite.config.ts --host 127.0.0.1 --port 4316",
+    "start:mcp": "node packages/mcp-server/dist/index.js",
+    "test:mcp-client": "tsx packages/mcp-server/src/test-client.ts",
+    "interactive:mcp-client": "tsx packages/mcp-server/src/interactive-client.ts",
+    "qa:local-input": "tsx packages/mcp-server/src/local-input-qa.ts",
+    "qa:representative": "tsx packages/mcp-server/src/representative-qa.ts",
+    "demo:scripted": "tsx packages/core/src/run-demo.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.base.json"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.4",
+    "@fontsource/ubuntu": "^5.2.8",
+    "@fontsource/ubuntu-mono": "^5.2.8",
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "fastify": "^4.28.1",
+    "playwright": "^1.52.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.18.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.5.16",
+    "@vitejs/plugin-react": "^4.4.1",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.18",
+    "vitest": "^3.1.2"
+  }
+}

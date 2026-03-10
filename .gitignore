@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+tmp/os-mock/
+*.tsbuildinfo
+.DS_Store
+output/
+tmp/
+results_step_1_m2sapo/
+results_steps_1_20_m2sapo/
+*.pdf
+*.pptx
