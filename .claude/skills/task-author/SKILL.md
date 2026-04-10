@@ -2,7 +2,8 @@
 
 Use this skill to design and implement OS-mock tasks.
 Accept natural language, short structured prompts, or mixed input.
-The default outcome is runnable task code plus synced docs, not just a proposal.
+The default outcome is a reviewable proposal package, not immediate code changes.
+Only implement task code and docs after the user explicitly approves the proposal or explicitly asks to skip review.
 If the user explicitly wants intentionally impossible tasks, this skill must support that path too.
 
 User request: $ARGUMENTS
@@ -15,7 +16,7 @@ User request: $ARGUMENTS
 - Expand a task family into multiple runnable `TaskSpec`s
 - Design intentionally impossible tasks that test whether the agent should recognize failure and abort
 - Generate a batch of varied tasks without duplicating the current inventory
-- Turn a short user request into real task code and synced docs, or into a proposal when runtime support is not available yet
+- Turn a short user request into a proposal package first, then into real task code and synced docs only after approval
 
 ## Step 0 — Start from partial input and ask iteratively
 
@@ -176,10 +177,27 @@ Impossible candidates must pass:
 - `Abort semantics defined`
 - `Runtime path declared`
 
-## Step 5 — Implement runnable tasks, proposal-only impossible tasks, or runtime extensions
+## Step 5 — Submit a proposal package for review first
 
-The default outcome is runnable task code.
-Do not stop at a proposal unless the user explicitly asks for proposal-only output, or unless the request is for impossible tasks but the runtime does not support them yet.
+Before editing task code, docs, or inventory, present a review package to the user.
+Do not mutate the repository until the user explicitly approves the proposal or explicitly asks to proceed without review.
+
+The review package must include:
+
+- normalized request
+- proposed task families
+- candidate task IDs and draft instructions
+- variation matrix
+- dedup assessment
+- files that would be edited
+- whether impossible tasks are proposal-only or need runtime expansion
+- planned validation steps
+
+If the user requests changes, revise the proposal first instead of partially implementing it.
+
+## Step 6 — Implement runnable tasks, proposal-only impossible tasks, or runtime extensions
+
+Only after approval, implement the approved scope.
 
 Important current-runtime limitation:
 
@@ -195,7 +213,7 @@ Decision rule:
 A runnable task counts as complete only if it is registered, deterministic, evaluable, and loadable through the current registry/session flow.
 A runnable impossible task counts as complete only if the runtime has explicit success semantics for recognized impossibility and the expected abort path is testable.
 
-## Step 6 — Sync docs and inventory
+## Step 7 — Sync docs and inventory
 
 Update these in the same change when task inventory or generation policy changes:
 
@@ -208,7 +226,7 @@ Update these in the same change when task inventory or generation policy changes
 When updating task docs, write explanatory task descriptions in Korean.
 If you need to preserve the exact `TaskSpec.instruction`, keep it as a raw original-string column.
 
-## Step 7 — Validate the batch
+## Step 8 — Validate the batch
 
 When task code changes, prefer:
 
@@ -229,6 +247,7 @@ If you add runnable impossible-task support, include validation that proves the 
 - Parameterize target file names, seed text, and initial selection state when possible instead of hard-coding one visible trajectory
 - Keep evaluator metadata and authoring-only setup details isolated from the agent-facing surface
 - Treat `constraints` and excluded features as hard limits
+- Default to proposal-first review before editing inventory files
 - Prefer family expansion over isolated task invention
 - Prefer batch diversity over raw count inflation
 - Do not use perturbations in this skill version
@@ -236,7 +255,7 @@ If you add runnable impossible-task support, include validation that proves the 
 
 ## Final response must include
 
-- implemented or changed task IDs with `instruction` shown in the summary table
+- proposal summary or implemented task IDs with `instruction` shown in the summary table
 - family assignment for the batch
 - feasibility mode for the batch: `runnable`, `impossible`, or `mixed`
 - variation summary
@@ -244,5 +263,6 @@ If you add runnable impossible-task support, include validation that proves the 
 - coverage impact
 - whether evaluator, predicate space, or session reward logic changed
 - whether impossible tasks are proposal-only or runnable
+- whether the user approved implementation or the response is still proposal-only
 - which docs were updated
 - what validation ran

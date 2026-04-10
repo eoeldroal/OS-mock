@@ -3,7 +3,8 @@
 ## Purpose
 
 This reference maps high-level AI task-generation requests into concrete OS-mock repository edits.
-The default outcome is a runnable batch of tasks plus synced inventory docs.
+The default outcome is a reviewable proposal package.
+Only after user approval should the skill edit task code, docs, or inventory files.
 It also supports intentionally impossible-task design when the user asks for it, but impossible tasks remain proposal-only unless runtime support is explicitly extended.
 Perturbations are out of scope for this workflow version.
 
@@ -62,7 +63,8 @@ Always generate large batches in this order:
 2. define each family's core capability, source app, sink app, workflow shape, feasibility mode, and predicate chain
 3. expand a bounded variation matrix per family
 4. run dedup and quality gates
-5. implement only the surviving candidates, or keep impossible candidates proposal-only if runtime support is absent
+5. submit a proposal package for user review
+6. implement only the approved candidates, or keep impossible candidates proposal-only if runtime support is absent
 
 Preferred variation axes:
 
@@ -99,6 +101,8 @@ Do not silently pretend that `FAIL` is already a rewarded success path.
 
 ## Files To Update
 
+Do not edit these files before the user approves the proposal package.
+
 Task implementation:
 
 - `packages/core/src/tasks/starter/`
@@ -123,7 +127,7 @@ Docs to keep in sync:
 
 ## Validation
 
-After inventory changes, run:
+After the user approves and inventory changes are implemented, run:
 
 - `npm run build`
 - `npm run typecheck`

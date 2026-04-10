@@ -599,10 +599,11 @@ Expected responsibility of this skill:
 - run `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode inventory` after task-inventory changes
 - run `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode candidates --input <candidate-json>` before promoting generated candidates
 - extend evaluator, session reward logic, or predicate space only when the request explicitly allows runnable impossible-task support
+- submit a proposal package for user review before editing task inventory by default
 
 Current policy for this skill:
 
-- default to runnable task implementation, not proposal-only output
+- default to proposal-first review, not immediate runnable task implementation
 - treat `starter` as shorter single-app or simple save/complete tasks
 - treat `representative` as longer multi-app extraction workflows
 - impossible tasks are allowed, but remain proposal-only unless runtime expansion is explicitly authorized
