@@ -51,8 +51,24 @@ function evaluatePredicate(
           browser.selectedCategoryId === targets.targetCategoryId &&
           browser.selectedTaskId === targets.targetBrowserTaskId
       );
+    case "browser.category_selected":
+      return Object.values(state.appStates.browserLite).some(
+        (browser) =>
+          browser.currentPage === "explorer" && browser.selectedCategoryId === targets.targetCategoryId
+      );
+    case "browser.bookmark_opened":
+      return Object.values(state.appStates.browserLite).some(
+        (browser) =>
+          browser.lastOpenedBookmarkId === targets.targetBookmarkId &&
+          (!targets.targetPage || browser.currentPage === targets.targetPage)
+      );
     case "browser.help_page_opened":
       return Object.values(state.appStates.browserLite).some((browser) => browser.currentPage === "help");
+    case "browser.help_topic_opened":
+      return Object.values(state.appStates.browserLite).some(
+        (browser) =>
+          browser.currentPage === "help" && browser.selectedHelpTopicId === targets.targetHelpTopicId
+      );
     case "mail.message_opened":
       return Object.values(state.appStates.mailLite).some(
         (mail) => mail.selectedMessageId === targets.targetMessageId

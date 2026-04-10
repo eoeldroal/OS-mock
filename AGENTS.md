@@ -21,7 +21,7 @@ The project is working end to end.
 - Starter tasks pass through the core environment and through the MCP layer
 - The shell now looks Ubuntu/GNOME-like rather than a generic desktop mock
 - Representative apps from the OSWorld paper direction have been added: Files, Text Editor, Firefox, Terminal, Thunderbird
-- The OSWorld Explorer-inspired representative QA suite currently passes all 4 representative tasks end to end
+- The representative QA suite targets the canonical representative browser/mail/terminal scenarios; local reruns may still be blocked by viewer port collisions
 
 This is still a mock, not a realistic full OS. The current goal is breadth of controllable environment composition, not pixel-faithful Ubuntu reproduction.
 
@@ -203,39 +203,27 @@ These references should inform shell/app structure, spacing, and information hie
 
 ## Current Starter Tasks
 
-- `dismiss_popup_then_append_note`
-- `rename_note_in_explorer`
-- `copy_line_between_windows`
-- `minimize_recover_and_save`
-- `browser_select_category_task`
-- `browser_switch_to_help`
-- `browser_log_task_id_simple`
-- `browser_help_log_summary_simple`
-- `browser_help_to_preopen_note`
-- `browser_select_from_help_and_log_preopen`
+Current starter inventory: `25`
 
-Task definitions live under:
+Starter task definitions live under:
 
-- `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/starter/`
-- starter entrypoint: `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/starter-tasks.ts`
+- `packages/core/src/tasks/starter/`
+- starter entrypoint: `packages/core/src/tasks/starter/index.ts`
 
 ## Current Representative Tasks
 
-These tasks are intended to be closer to OSWorld Explorer-style RL rollouts than the minimal starter set.
-
-- `browser_help_preopen_note_distractors`
-- `browser_log_task_preopen_note_hard`
-- `mail_extract_mock_note`
-- `terminal_record_working_directory`
+Current representative inventory: `23`
 
 Representative task definitions live under:
 
-- `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/representative/`
-- representative entrypoint: `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/representative-tasks.ts`
+- `packages/core/src/tasks/representative/`
+- representative entrypoint: `packages/core/src/tasks/representative/index.ts`
+
+For the full current task ID list, see `doc/task/task-hub.md`.
 
 Task registry and split handling live under:
 
-- `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/registry.ts`
+- `packages/core/src/tasks/registry.ts`
 - `trainer.list_tasks`/`listTasks()` returns only agent-safe public catalog fields (`id`, `instruction`, `maxSteps`, `seedDefaults`, `domain`, `split`); internal task metadata is authoring-only and must not be exposed to the agent under test
 
 Supported task splits:
@@ -604,6 +592,7 @@ Expected responsibility of this skill:
 Current policy for this skill:
 
 - default to proposal-first review, not immediate runnable task implementation
+- proposal-only 출력은 한국어 위주로, 필수 승인 정보만 짧게 정리한다
 - treat `starter` as shorter single-app or simple save/complete tasks
 - treat `representative` as longer multi-app extraction workflows
 - impossible tasks are allowed, but remain proposal-only unless runtime expansion is explicitly authorized

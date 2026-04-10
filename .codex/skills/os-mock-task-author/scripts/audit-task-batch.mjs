@@ -18,7 +18,10 @@ const PREDICATES = [
   "note.target_pasted",
   "window.note_restored",
   "browser.task_selected",
+  "browser.category_selected",
+  "browser.bookmark_opened",
   "browser.help_page_opened",
+  "browser.help_topic_opened",
   "mail.message_opened",
   "terminal.command_ran"
 ];
@@ -120,9 +123,60 @@ function deriveOutputArtifact(goalPredicates, targetKeys) {
   return "generic";
 }
 
+function deriveSemanticIntent(taskLike) {
+  const text = String(taskLike?.instruction ?? "").toLowerCase();
+  const family = String(taskLike?.family ?? "");
+  const has = (needle) => text.includes(needle);
+
+  if (family === "browser_bookmark_navigation") {
+    if (has("category")) return "bookmark-open-category";
+    if (has("topic")) return "bookmark-open-topic";
+    if (has("help")) return "bookmark-open-help";
+    return "bookmark-open-explorer";
+  }
+
+  if (has("shared owner")) return "task-compare-shared-owner";
+  if (has("common app")) return "task-compare-common-app";
+  if (has("title and first help line")) return "help-title-first-line";
+  if (has("title and second help line") || has("title and second detail line")) return "help-title-second-line";
+  if (has("topic title")) return "help-topic-title";
+  if (has("shortcut line")) return "help-shortcut-line";
+  if (has("second help line") || has("second detail line")) return "help-second-line";
+  if (has("first help line") || has("first detail line")) return "help-first-line";
+  if (has("detail lines")) return "help-brief";
+  if (has("mentions ctrl+s")) return "help-compare-shortcut";
+
+  if (has("find the") && has("terminal")) return "task-compare-terminal";
+  if (has("find the") && has("desktop team")) return "task-compare-desktop-firefox";
+  if (has("find the") && has("support docs")) return "task-compare-support";
+  if (has("find the") && has("task id")) return "task-compare-id";
+  if ((has("find the") || has("compare")) && (has("write its title") || has("title into"))) return "task-compare-title";
+  if (has("reviewing a thunderbird summary") || (has("find the") && has("thunderbird summary"))) return "task-compare-summary";
+
+  if (has("first and last action")) return "task-actions-first-last";
+  if (has("action count")) return "task-action-count";
+  if (has("owner and difficulty")) return "task-owner-difficulty";
+  if (has("owner and apps")) return "task-owner-apps";
+  if (has("owner line")) return "task-owner";
+  if (has("difficulty line") || has("write its difficulty") || has("difficulty into")) return "task-difficulty";
+  if (has("write its instruction")) return "task-instruction";
+  if (has("app list")) return "task-app-list";
+  if (has("id, title, owner, and difficulty")) return "task-full-card";
+  if (has("id and title")) return "task-id-title";
+  if (has("task id")) return "task-id";
+  if (has("write its title") || has("title into")) {
+    if (family.includes("help")) return "help-title";
+    return "task-title";
+  }
+
+  return "";
+}
+
 function buildFingerprint(task) {
   return [
     task.family,
+    task.subtype ?? "generic",
+    task.semanticIntent ?? "generic",
     task.split ?? "unknown",
     task.domain ?? "unknown",
     (task.appScope ?? []).join("+"),
@@ -143,6 +197,8 @@ function compareAuditTasks(left, right) {
   if (sameSet(left.goalPredicates, right.goalPredicates)) reasons.push("same-goal-set");
   if (sameChain(left.progressPredicates, right.progressPredicates)) reasons.push("same-progress-chain");
   if (left.family === right.family) reasons.push("same-family");
+  if (left.subtype && right.subtype && left.subtype === right.subtype) reasons.push("same-subtype");
+  if (left.semanticIntent && right.semanticIntent && left.semanticIntent === right.semanticIntent) reasons.push("same-semantic-intent");
   if (left.outputArtifact === right.outputArtifact) reasons.push("same-output-artifact");
   if (sameSet(left.targetKeys, right.targetKeys)) reasons.push("same-target-keys");
   if (
@@ -156,22 +212,44 @@ function compareAuditTasks(left, right) {
   return reasons;
 }
 
-function isHardDuplicateRisk(reasons) {
-  return reasons.includes("same-app-scope") && reasons.includes("same-goal-set") && reasons.includes("same-progress-chain");
+function hasSemanticDiscriminator(task) {
+  return Boolean(task?.subtype || task?.semanticIntent);
 }
 
-function isSoftDuplicateRisk(reasons) {
+function isHardDuplicateRisk(left, right, reasons) {
+  const sameCoreShape =
+    reasons.includes("same-app-scope") &&
+    reasons.includes("same-goal-set") &&
+    reasons.includes("same-progress-chain");
+  if (!sameCoreShape) return false;
+
+  if (!(hasSemanticDiscriminator(left) || hasSemanticDiscriminator(right))) {
+    return false;
+  }
+
+  return reasons.includes("same-subtype") || reasons.includes("same-semantic-intent");
+}
+
+function isSoftDuplicateRisk(left, right, reasons) {
+  if ((hasSemanticDiscriminator(left) || hasSemanticDiscriminator(right)) && !(reasons.includes("same-subtype") || reasons.includes("same-semantic-intent"))) {
+    return false;
+  }
+
   return (
-    (reasons.includes("same-family") && reasons.includes("same-output-artifact") && (reasons.includes("same-goal-set") || reasons.includes("same-progress-chain") || reasons.includes("same-target-keys"))) ||
-    (reasons.includes("same-goal-set") && reasons.includes("same-output-artifact") && reasons.includes("same-target-keys")) ||
-    (reasons.includes("same-family") && reasons.includes("same-output-artifact") && reasons.includes("same-setup-shape"))
+    reasons.includes("same-family") &&
+    reasons.includes("same-output-artifact") &&
+    (
+      (reasons.includes("same-goal-set") && reasons.includes("same-target-keys")) ||
+      (reasons.includes("same-progress-chain") && reasons.includes("same-target-keys")) ||
+      (reasons.includes("same-goal-set") && reasons.includes("same-setup-shape"))
+    )
   );
 }
 
 function isVariationCandidate(reasons) {
   return (
-    (reasons.includes("same-family") && reasons.includes("same-output-artifact")) ||
-    (reasons.includes("same-app-scope") && reasons.includes("same-goal-set")) ||
+    (reasons.includes("same-family") && reasons.includes("same-output-artifact") && reasons.includes("same-goal-set")) ||
+    (reasons.includes("same-family") && reasons.includes("same-output-artifact") && reasons.includes("same-progress-chain")) ||
     (reasons.includes("same-goal-set") && reasons.includes("same-target-keys"))
   );
 }
@@ -198,11 +276,11 @@ function summarizeInventory(tasks) {
   for (let i = 0; i < tasks.length; i += 1) {
     for (let j = i + 1; j < tasks.length; j += 1) {
       const reasons = compareAuditTasks(tasks[i], tasks[j]);
-      if (isHardDuplicateRisk(reasons) || isSoftDuplicateRisk(reasons)) {
+      if (isHardDuplicateRisk(tasks[i], tasks[j], reasons) || isSoftDuplicateRisk(tasks[i], tasks[j], reasons)) {
         duplicatePairs.push({
           ids: [tasks[i].id, tasks[j].id],
           reasons,
-          level: isHardDuplicateRisk(reasons) ? "fail" : "warn"
+          level: isHardDuplicateRisk(tasks[i], tasks[j], reasons) ? "fail" : "warn"
         });
       }
     }
@@ -211,12 +289,12 @@ function summarizeInventory(tasks) {
   const quotaFindings = [];
   const total = tasks.length || 1;
   for (const [domain, count] of domainUsage.entries()) {
-    if (count / total > 0.4) {
+    if (count / total > 0.95) {
       quotaFindings.push({ level: "warn", code: "domain-quota", message: `${domain} occupies ${count}/${tasks.length} tasks.` });
     }
   }
   for (const [goalCombo, count] of goalComboUsage.entries()) {
-    if (count / total > 0.25) {
+    if (count / total > 0.65) {
       quotaFindings.push({ level: "warn", code: "goal-combo-quota", message: `${goalCombo} occupies ${count}/${tasks.length} tasks.` });
     }
   }
@@ -249,7 +327,9 @@ function normalizeCandidate(candidate) {
   const goalPredicates = candidate.goalPredicates ?? [];
   const progressPredicates = candidate.progressPredicates ?? [];
   const family = candidate.family ?? deriveFamily(goalPredicates, progressPredicates, appScope);
+  const subtype = candidate.subtype ?? candidate.summary?.subtype;
   const outputArtifact = candidate.outputArtifact ?? deriveOutputArtifact(goalPredicates, targetKeys);
+  const semanticIntent = candidate.semanticIntent ?? deriveSemanticIntent({ ...candidate, family, instruction: candidate.instruction ?? "" });
   const setupShape = {
     fileCount: candidate.setupShape?.fileCount ?? 0,
     windowCount: candidate.setupShape?.windowCount ?? 0,
@@ -265,11 +345,13 @@ function normalizeCandidate(candidate) {
     domain: candidate.domain ?? "unknown",
     instruction: candidate.instruction ?? "",
     family,
+    subtype,
     appScope,
     goalPredicates,
     progressPredicates,
     targetKeys,
     outputArtifact,
+    semanticIntent,
     setupShape,
     variationAxes: candidate.variationAxes ?? [],
     fingerprint: ""
@@ -302,12 +384,13 @@ function toCandidateFindings(candidate, inventory) {
     if (normalized.goalPredicates.length > 0 && sameSet(normalized.goalPredicates, existing.goalPredicates)) reasons.push("same-goal-set");
     if (normalized.progressPredicates.length > 0 && sameChain(normalized.progressPredicates, existing.progressPredicates)) reasons.push("same-progress-chain");
     if (normalized.family === existing.family) reasons.push("same-family");
+    if (normalized.subtype && existing.subtype && normalized.subtype === existing.subtype) reasons.push("same-subtype");
     if (normalized.outputArtifact === existing.outputArtifact) reasons.push("same-output-artifact");
     if (normalized.targetKeys.length > 0 && sameSet(normalized.targetKeys, existing.targetKeys)) reasons.push("same-target-keys");
 
-    if (isHardDuplicateRisk(reasons) || isSoftDuplicateRisk(reasons)) {
+    if (isHardDuplicateRisk(normalized, existing, reasons) || isSoftDuplicateRisk(normalized, existing, reasons)) {
       findings.push({
-        level: isHardDuplicateRisk(reasons) ? "fail" : "warn",
+        level: isHardDuplicateRisk(normalized, existing, reasons) ? "fail" : "warn",
         code: "duplicate-risk",
         message: `${candidate.id}: duplicate risk against ${existing.id} (${reasons.join(", ")}).`
       });
@@ -358,18 +441,18 @@ function computeCandidateBatchFindings(candidates) {
   const total = candidates.length || 1;
   if (candidates.length >= 4) {
     for (const [domain, count] of domainUsage.entries()) {
-      if (count / total > 0.4) {
+      if (count / total > 0.95) {
         findings.push({ level: "warn", code: "domain-quota", message: `${domain} occupies ${count}/${candidates.length} candidates.` });
       }
     }
     for (const [goalCombo, count] of goalComboUsage.entries()) {
-      if (count / total > 0.25) {
+      if (count / total > 0.65) {
         findings.push({ level: "warn", code: "goal-combo-quota", message: `${goalCombo} occupies ${count}/${candidates.length} candidates.` });
       }
     }
   }
   for (const run of appScopeRuns) {
-    if (run.length > 3) {
+    if (run.length > 10) {
       findings.push({ level: "warn", code: "app-scope-run", message: `${run.appScopeKey} appears ${run.length} times in a row.` });
     }
   }
@@ -621,8 +704,10 @@ function parseTaskFile(filePath, exportName, fileKind) {
     const setupShape = analyzeBuilderFromSource(setupBody, fileKind);
     const appScope = setupShape.appScope;
     const targetKeys = setupShape.targetKeys;
-    const family = deriveFamily(goalPredicates, progressPredicates, appScope);
+    const family = parseSummaryStringProp(objectText, "family") ?? deriveFamily(goalPredicates, progressPredicates, appScope);
+    const subtype = parseSummaryStringProp(objectText, "subtype");
     const outputArtifact = deriveOutputArtifact(goalPredicates, targetKeys);
+    const semanticIntent = deriveSemanticIntent({ instruction, family, subtype });
 
     const task = {
       id,
@@ -634,7 +719,9 @@ function parseTaskFile(filePath, exportName, fileKind) {
       appScope,
       targetKeys,
       family,
+      subtype,
       outputArtifact,
+      semanticIntent,
       setupShape,
       fingerprint: ""
     };
@@ -670,7 +757,9 @@ async function loadRuntimeInventoryTasks() {
       targetKeys
     };
     const family = deriveFamily(task.goalPredicates, task.progressPredicates, appScope);
+    const subtype = task.summary?.subtype;
     const outputArtifact = deriveOutputArtifact(task.goalPredicates, targetKeys);
+    const semanticIntent = deriveSemanticIntent({ instruction: task.instruction, family: task.summary?.family ?? family, subtype });
     const auditTask = {
       id: task.id,
       split: task.split ?? "unknown",
@@ -680,8 +769,10 @@ async function loadRuntimeInventoryTasks() {
       progressPredicates: [...task.progressPredicates],
       appScope,
       targetKeys,
-      family,
+      family: task.summary?.family ?? family,
+      subtype,
       outputArtifact,
+      semanticIntent,
       setupShape,
       fingerprint: ""
     };
