@@ -209,18 +209,10 @@ These references should inform shell/app structure, spacing, and information hie
 - `minimize_recover_and_save`
 - `browser_select_category_task`
 - `browser_switch_to_help`
-- `browser_log_task_from_help_start`
-- `browser_help_to_preopen_note`
-- `browser_select_from_minimized`
-- `browser_select_from_unfocused`
-- `browser_select_from_help_page`
-- `browser_help_from_unfocused_starter`
-- `browser_help_from_minimized_starter`
 - `browser_log_task_id_simple`
 - `browser_help_log_summary_simple`
+- `browser_help_to_preopen_note`
 - `browser_select_from_help_and_log_preopen`
-- `browser_help_log_summary_preopen`
-- `browser_select_log_to_preopen`
 
 Task definitions live under:
 
@@ -231,36 +223,10 @@ Task definitions live under:
 
 These tasks are intended to be closer to OSWorld Explorer-style RL rollouts than the minimal starter set.
 
-- `browser_log_workflow_task_id`
-- `browser_capture_help_line`
-- `mail_extract_mock_note`
-- `terminal_record_working_directory`
-- `browser_log_task_from_minimized`
-- `browser_help_from_minimized`
-- `browser_log_task_unfocused_help_start`
 - `browser_help_preopen_note_distractors`
 - `browser_log_task_preopen_note_hard`
-- `browser_help_unfocused_distractors`
-- `browser_log_task_instruction_text`
-- `browser_log_task_title_text`
-- `browser_select_log_unfocused`
-- `browser_select_log_minimized_preopen`
-- `browser_help_log_unfocused_preopen`
-- `browser_help_log_minimized_preopen`
-- `browser_log_task_with_distractors`
-- `browser_help_log_dock_with_distractors`
-- `browser_select_different_category_log`
-- `browser_help_log_summary_distractors`
-- `browser_log_task_minimized_distractors`
-- `browser_log_task_unfocused_distractors`
-- `browser_log_task_append_existing`
-- `browser_help_append_existing`
-- `browser_help_minimized_distractors`
-- `browser_log_from_help_unfocused_distractors`
-- `browser_help_append_unfocused_distractors`
-- `browser_select_log_minimized_help_start`
-- `browser_log_instruction_unfocused_distractors`
-- `browser_select_append_minimized_distractors`
+- `mail_extract_mock_note`
+- `terminal_record_working_directory`
 
 Representative task definitions live under:
 
@@ -472,8 +438,8 @@ The following were run and passed:
 
 Representative QA pass criteria:
 
-- `browser_log_workflow_task_id`
-- `browser_capture_help_line`
+- `browser_log_task_preopen_note_hard`
+- `browser_help_preopen_note_distractors`
 - `mail_extract_mock_note`
 - `terminal_record_working_directory`
 
@@ -627,6 +593,7 @@ Expected responsibility of this skill:
 - accept partial user input and gather missing task-design information through multiple short follow-up questions
 - expand short requests into task families, variation matrices, and deduped runnable `TaskSpec` implementations
 - support intentionally impossible task design, following `doc/personal/20260410_osworld_impossible_tasks.md`
+- follow `doc/task/osworld-mock-authoring-guide.md` so generated tasks preserve core capability while avoiding benchmark-domain leakage
 - prefer family-first batch generation over isolated one-off task invention
 - keep `doc/task/task-hub.md` and `doc/task/tasks-and-perturbations.md` synchronized with task inventory changes
 - run `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode inventory` after task-inventory changes
@@ -639,6 +606,7 @@ Current policy for this skill:
 - treat `starter` as shorter single-app or simple save/complete tasks
 - treat `representative` as longer multi-app extraction workflows
 - impossible tasks are allowed, but remain proposal-only unless runtime expansion is explicitly authorized
+- treat minimized/unfocused/help-start/distractor/existing-content changes as setup variation before creating a brand-new browser task
 - do not use perturbations in the current task-generation flow unless the policy changes later
 - use dedup and quality gates before promoting candidates to new tasks
 

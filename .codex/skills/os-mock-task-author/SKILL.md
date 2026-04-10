@@ -77,6 +77,7 @@ Read these files before doing anything else:
 - `doc/task/tasks-and-perturbations.md`
 - `doc/task/task-hub.md`
 - `doc/personal/20260410_osworld_impossible_tasks.md`
+- `doc/task/osworld-mock-authoring-guide.md`
 - `packages/core/src/types.ts`
 - `packages/core/src/env/evaluator.ts`
 - `packages/core/src/env/session.ts`
@@ -87,12 +88,14 @@ Read these files before doing anything else:
 - [references/repo-task-workflow.md](references/repo-task-workflow.md)
 
 Treat `doc/personal/20260410_osworld_impossible_tasks.md` as the policy anchor for intentionally impossible tasks.
+Treat `doc/task/osworld-mock-authoring-guide.md` as the policy anchor for contamination-safe mock task generation, domain substitution, and metadata isolation.
 
 ## Step 2 — Expand the request into task families
 
 Before designing individual tasks, infer the smallest useful set of task families.
 For each family, decide:
 
+- core capability being measured
 - split and domain
 - source app and sink app
 - intended workflow shape
@@ -111,6 +114,8 @@ For impossible-task families, explicitly state why the task cannot be completed:
 - nonexistent file, data, or resource
 - logically contradictory instruction
 - hallucinated capability outside the current environment
+
+For runnable families, first extract the capability you want to test, then choose a safe local mock domain that does not mirror benchmark surface text or public-service content too closely.
 
 ## Step 3 — Build a variation matrix
 
@@ -149,6 +154,8 @@ Create a `task fingerprint` from:
 - variation axes actually used
 
 Treat a candidate as a duplicate risk if two or more of these are effectively the same as an existing task, including cases where the impossibility reason and observable cues are effectively identical.
+Differences limited to `minimized`, `unfocused`, `help-start`, `distractors`, `preopen note`, or `existing content` should normally be absorbed as seed/setup variation, not promoted into a brand-new browser task.
+Differences that only rename domains, files, or text while preserving the same capability and workflow meaning should also count as duplicate risk.
 
 If duplicate risk is high, prefer one of these outcomes in order:
 
@@ -222,6 +229,10 @@ If you add runnable impossible-task support, include validation that proves the 
 ## Authoring rules
 
 - Stay inside the current reducer, evaluator, and app behavior unless the request explicitly allows expansion
+- Start from core capability first, then design a mock-domain substitution instead of copying benchmark surface forms
+- Avoid direct reuse of benchmark domains, famous public services, or benchmark-original phrasing when a local offline analogue can carry the same capability
+- Parameterize target file names, seed text, and initial selection state when possible instead of hard-coding one visible trajectory
+- Keep evaluator metadata and authoring-only setup details isolated from the agent-facing surface
 - Treat `constraints` and excluded features as hard limits
 - Prefer family expansion over isolated task invention
 - Prefer batch diversity over raw count inflation
@@ -238,5 +249,3 @@ If you add runnable impossible-task support, include validation that proves the 
 - coverage impact
 - whether evaluator, predicate space, or session reward logic changed
 - whether impossible tasks are proposal-only or runnable
-- which docs were updated
-- what validation ran

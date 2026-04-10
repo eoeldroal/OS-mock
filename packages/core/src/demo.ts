@@ -85,39 +85,32 @@ export function solveMinimizeRecoverAndSave(seed = 0) {
   return env.step({ type: "DONE" });
 }
 
-export function solveBrowserLogWorkflowTaskId(seed = 0) {
+export function solveBrowserLogTaskPreopenNoteHard(seed = 0) {
   const env = new MockOsEnv();
-  env.reset({ taskId: "browser_log_workflow_task_id", seed });
+  env.reset({ taskId: "browser_log_task_preopen_note_hard", seed });
   const hidden = env.getHiddenState();
-  const workflow = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "Workflow");
-  clickNode(env, workflow);
-  const bridgeTask = findNode(
+  const chromeCategory = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "Chrome");
+  clickNode(env, chromeCategory);
+  const targetTask = findNode(
     observeNodes(env),
-    (node) => node.role === "listitem" && node.name === "Bridge a Thunderbird summary into notes"
+    (node) => node.role === "listitem" && node.name === "Capture the Ubuntu help reminder"
   );
-  clickNode(env, bridgeTask);
-  const browserLogFile = findNode(
-    observeNodes(env),
-    (node) => node.role === "listitem" && node.name === "browser-log.txt"
-  );
-  clickNode(env, browserLogFile, "DOUBLE_CLICK");
+  clickNode(env, targetTask);
   const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "browser-log.txt");
-  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + 8 });
+  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + textBox.bounds.height - 8 });
   env.step({ type: "TYPING", text: hidden.targets.appendText });
   env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
   return env.step({ type: "DONE" });
 }
 
-export function solveBrowserCaptureHelpLine(seed = 0) {
+export function solveBrowserHelpPreopenNoteDistractors(seed = 0) {
   const env = new MockOsEnv();
-  env.reset({ taskId: "browser_capture_help_line", seed });
+  env.reset({ taskId: "browser_help_preopen_note_distractors", seed });
   const hidden = env.getHiddenState();
   const helpTab = findNode(observeNodes(env), (node) => node.role === "button" && node.name === "Ubuntu help");
   clickNode(env, helpTab);
-  const helpFile = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "ubuntu-help.txt");
-  clickNode(env, helpFile, "DOUBLE_CLICK");
-  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "ubuntu-help.txt");
-  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + 8 });
+  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "help-notes.txt");
+  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + textBox.bounds.height - 8 });
   env.step({ type: "TYPING", text: hidden.targets.appendText });
   env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
   return env.step({ type: "DONE" });
@@ -164,9 +157,12 @@ export function runScriptedPolicyDemo() {
     rename_note_in_explorer: solveRenameNoteInExplorer(),
     copy_line_between_windows: solveCopyLineBetweenWindows(),
     minimize_recover_and_save: solveMinimizeRecoverAndSave(),
-    browser_log_workflow_task_id: solveBrowserLogWorkflowTaskId(),
-    browser_capture_help_line: solveBrowserCaptureHelpLine(),
+    browser_log_task_preopen_note_hard: solveBrowserLogTaskPreopenNoteHard(),
+    browser_help_preopen_note_distractors: solveBrowserHelpPreopenNoteDistractors(),
     mail_extract_mock_note: solveMailExtractMockNote(),
     terminal_record_working_directory: solveTerminalRecordWorkingDirectory()
   };
 }
+
+export const solveBrowserLogWorkflowTaskId = solveBrowserLogTaskPreopenNoteHard;
+export const solveBrowserCaptureHelpLine = solveBrowserHelpPreopenNoteDistractors;

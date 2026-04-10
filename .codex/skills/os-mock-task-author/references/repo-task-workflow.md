@@ -3,8 +3,26 @@
 ## Purpose
 
 This reference maps high-level AI task-generation requests into concrete OS-mock repository edits.
-The target outcome is a runnable batch of tasks by default, but it also supports intentionally impossible-task design when the user asks for it.
+The default outcome is a runnable batch of tasks plus synced inventory docs.
+It also supports intentionally impossible-task design when the user asks for it, but impossible tasks remain proposal-only unless runtime support is explicitly extended.
 Perturbations are out of scope for this workflow version.
+
+## Policy Anchors
+
+Read and follow these policy anchors before designing or implementing tasks:
+
+- `doc/task/osworld-mock-authoring-guide.md`
+- `doc/personal/20260410_osworld_impossible_tasks.md`
+
+Use `doc/task/osworld-mock-authoring-guide.md` to keep task design contamination-safe.
+That means:
+
+- infer the core capability first
+- build a local mock-domain substitute second
+- avoid copying benchmark surface text, famous services, or public-site workflows directly
+- keep authoring metadata and evaluator details off the agent-facing surface
+
+Use `doc/personal/20260410_osworld_impossible_tasks.md` when the batch includes intentionally impossible tasks.
 
 ## Conversational Intake
 
@@ -27,12 +45,12 @@ Ask missing fields in this order unless the request already answers them:
 
 | Request field | Where it lands |
 |---|---|
-| `goal` | plain-language task goal that becomes the basis for `TaskSpec.instruction` and final success design |
+| `goal` | capability definition, `TaskSpec.instruction`, and success design |
 | `apps` | source app, sink app, and family selection |
 | `count` | batch size target |
-| `splits` | `TaskSpec.split` and target task file |
+| `splits` | `TaskSpec.split` and target implementation directory |
 | `feasibility` | whether the batch is `runnable`, `impossible`, or `mixed` |
-| `difficulties` | affects horizon, distractors, setup difficulty, and workflow complexity |
+| `difficulties` | affects horizon, setup friction, distractors, and workflow complexity |
 | `variation_preferences` | preferred variation axes for matrix generation |
 | `constraints` | excluded features plus implementation-surface limits and whether runtime expansion is allowed |
 
@@ -41,7 +59,7 @@ Ask missing fields in this order unless the request already answers them:
 Always generate large batches in this order:
 
 1. infer task families from the minimal request
-2. define each family's source app, sink app, workflow shape, feasibility mode, and predicate chain
+2. define each family's core capability, source app, sink app, workflow shape, feasibility mode, and predicate chain
 3. expand a bounded variation matrix per family
 4. run dedup and quality gates
 5. implement only the surviving candidates, or keep impossible candidates proposal-only if runtime support is absent
@@ -57,16 +75,34 @@ Preferred variation axes:
 - `initial selected item`
 - `impossibility reason`
 
+Before promoting a new browser task, treat these as setup variation by default rather than task identity:
+
+- `minimized`
+- `unfocused`
+- `help-start`
+- `distractors`
+- `preopen note`
+- `existing content`
+
+If a candidate only differs on those axes, absorb it into seed/setup variation unless the workflow meaning, output artifact, or impossibility reasoning meaning changes.
+
 ## Impossible Task Rule
 
-Use `doc/personal/20260410_osworld_impossible_tasks.md` as the reference for intentionally impossible tasks.
+Impossible-task support has two modes:
+
+1. `proposal-only`
+2. `runtime-extended`
+
+Default to `proposal-only` unless the user explicitly authorizes runtime expansion.
 If the user wants runnable impossible tasks, extend evaluator/session/reward behavior first.
-If runtime expansion is not allowed, keep impossible tasks proposal-only and say so explicitly.
+Do not silently pretend that `FAIL` is already a rewarded success path.
 
 ## Files To Update
 
 Task implementation:
 
+- `packages/core/src/tasks/starter/`
+- `packages/core/src/tasks/representative/`
 - `packages/core/src/tasks/starter-tasks.ts`
 - `packages/core/src/tasks/representative-tasks.ts`
 - `packages/core/src/tasks/registry.ts`
@@ -90,6 +126,10 @@ Docs to keep in sync:
 After inventory changes, run:
 
 - `npm run build`
-- `npm test`
+- `npm run typecheck`
 - `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode inventory`
 - `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode candidates --input <candidate-json>` before promoting generated candidates
+
+If representative tasks changed materially, also run:
+
+- `npm run qa:representative`
