@@ -198,6 +198,25 @@ The review package must include:
 - whether impossible tasks are proposal-only or need runtime expansion
 - planned validation steps
 
+### Proposal-only output style
+
+When the response is still proposal-only:
+
+- default to Korean
+- keep the response compact and high-signal
+- include only essential review information needed for approval
+- avoid repeating policy text, long rubric restatements, or verbose per-task explanations unless the user asks
+- prefer short tables or grouped bullets over long prose
+- summarize duplicate-risk handling at batch level unless a specific candidate is controversial
+- keep candidate detail to the minimum needed for approval:
+  - `id`
+  - `family`
+  - `split`
+  - `instruction`
+  - one short note only if needed to explain why it is not a duplicate
+
+If the user asks for more depth, then expand. Otherwise proposal-first responses should optimize for token efficiency.
+
 If the user requests changes, revise the proposal first instead of partially implementing it.
 
 ## Step 6 — Implement runnable tasks, proposal-only impossible tasks, or runtime extensions
@@ -269,3 +288,5 @@ If you add runnable impossible-task support, include validation that proves the 
 - whether evaluator, predicate space, or session reward logic changed
 - whether impossible tasks are proposal-only or runnable
 - whether the user approved implementation or the response is still proposal-only
+
+When the response is proposal-only, satisfy the list above as compactly as possible and keep the wording Korean-first unless the user requests otherwise.
