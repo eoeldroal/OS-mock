@@ -369,6 +369,17 @@ export type ScheduledPerturbation = {
   params?: Record<string, unknown>;
 };
 
+export type TaskLevel = "A" | "B" | "C" | "D";
+
+export type TaskSummary = {
+  family: string;
+  level: TaskLevel;
+  apps: string[];
+  startState: string;
+  objective: string;
+  implementationPath: string;
+};
+
 export type TaskSpec = {
   id: string;
   instruction: string;
@@ -376,6 +387,7 @@ export type TaskSpec = {
   seedDefaults: number[];
   domain?: string;
   split?: "starter" | "representative";
+  summary: TaskSummary;
   setup(seed: number, viewport: Viewport): TaskSetup;
   goalPredicates: PredicateId[];
   progressPredicates: PredicateId[];
