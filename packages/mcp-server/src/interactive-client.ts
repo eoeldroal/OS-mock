@@ -8,6 +8,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Computer13Action, StepResult } from "../../core/src/types.js";
 
+//터미널에서 직접 명령어를 치며 서버와 소통하는 도구
+//유저가 click 10 20이라고 치면, 클라이언트가 이를 { type: "CLICK", x: 10, y: 20 }이라는 정식 Action JSON으로 번역하여 서버의 computer13.step 도구를 호출
+
 type CliOptions = {
   taskId?: string;
   seed: number;

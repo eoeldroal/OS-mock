@@ -15,7 +15,7 @@ function jsonResponse(payload: unknown) {
 
 export function registerTrainerTools(server: McpServer, host: HostApp) {
   server.registerTool(
-    "trainer.create_session",
+    "trainer.create_session", //훈련을 시작할 빈 방을 하나 파달라
     {
       description: "Create a new OS mock session.",
       inputSchema: {

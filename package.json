@@ -26,6 +26,7 @@
     "@fastify/static": "^7.0.4",
     "@fontsource/ubuntu": "^5.2.8",
     "@fontsource/ubuntu-mono": "^5.2.8",
+    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "fastify": "^4.28.1",
     "playwright": "^1.52.0",

@@ -7,3 +7,5 @@ export * from "./env/perturbations.js";
 export * from "./env/reducer.js";
 export * from "./env/session.js";
 export * from "./tasks/registry.js";
+
+export * from "./tasks/custom_team3.js";
