@@ -644,16 +644,14 @@ function parseTaskFile(filePath, exportName, fileKind) {
 }
 
 async function loadRuntimeInventoryTasks() {
-  const distRegistryPath = path.join(repoRoot, "packages/core/dist/tasks/registry.js");
-  const distFactoryPath = path.join(repoRoot, "packages/core/dist/env/factory.js");
-  if (!fs.existsSync(distRegistryPath) || !fs.existsSync(distFactoryPath)) {
+  const distIndexPath = path.join(repoRoot, "packages/core/dist/index.js");
+  if (!fs.existsSync(distIndexPath)) {
     return null;
   }
 
-  const registryModule = await import(pathToFileURL(distRegistryPath).href);
-  const factoryModule = await import(pathToFileURL(distFactoryPath).href);
-  const tasks = registryModule.ALL_TASKS ?? [];
-  const viewport = factoryModule.DEFAULT_VIEWPORT;
+  const coreModule = await import(pathToFileURL(distIndexPath).href);
+  const tasks = coreModule.ALL_TASKS ?? [];
+  const viewport = coreModule.DEFAULT_VIEWPORT;
 
   return tasks.map((task) => {
     const seed = task.seedDefaults?.[0] ?? 0;

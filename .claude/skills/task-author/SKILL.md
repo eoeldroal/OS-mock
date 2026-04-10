@@ -3,6 +3,7 @@
 Use this skill to design and implement OS-mock tasks.
 Accept natural language, short structured prompts, or mixed input.
 The default outcome is runnable task code plus synced docs, not just a proposal.
+If the user explicitly wants intentionally impossible tasks, this skill must support that path too.
 
 User request: $ARGUMENTS
 
@@ -12,46 +13,42 @@ User request: $ARGUMENTS
 
 - Add new OS-mock tasks from high-level requests
 - Expand a task family into multiple runnable `TaskSpec`s
+- Design intentionally impossible tasks that test whether the agent should recognize failure and abort
 - Generate a batch of varied tasks without duplicating the current inventory
-- Turn a short user request into real task code and synced docs
+- Turn a short user request into real task code and synced docs, or into a proposal when runtime support is not available yet
 
 ## Step 0 — Start from partial input and ask iteratively
 
 Do not assume the user will provide a complete request.
-Accept partial input such as only a goal, only an app combination, or only a desired batch size.
+Accept partial input such as only a goal, only an app combination, only a desired batch size, or only a request for impossible tasks.
 The skill must gather missing information through multiple short follow-up questions when needed.
 
-The target request shape is still:
+The normalized request shape is:
 
-- `goal`: what the simulated user must accomplish
+- `goal`: what the simulated user must accomplish, or fail to accomplish in an impossible task
 - `apps`: which apps or surfaces are involved
 - `count`: how many tasks to generate
 - `splits`: `starter`, `representative`, or both
-  - `starter`: shorter single-app or simple save/complete tasks
-  - `representative`: longer multi-app extraction workflows
 - `difficulties`: one or more of `easy`, `medium`, `hard`
+- `feasibility`: `runnable`, `impossible`, or `mixed`
 - `variation_preferences`: content/layout/focus/window-state/distractor preferences
-- `constraints`: excluded features and whether to stay inside the current implementation surface
+- `constraints`: excluded features, implementation-surface limits, and whether runtime expansion is allowed
 
-But this is an internal normalized shape, not a required user-facing schema.
-The user may provide only a subset.
-
-If important fields are missing, ask for them one at a time or in a short sequence, prioritizing the highest-impact unknowns first.
-Default question priority:
+Ask for missing fields in this order unless the request already answers them:
 
 1. `goal`
 2. `apps`
 3. `count`
 4. `splits`
-   Ask with a short explanation: `starter` means shorter single-app or simple save/complete tasks, and `representative` means longer multi-app extraction workflows. If the user is unsure, recommend the closer fit instead of repeating the label only.
-5. `difficulties`
-6. `variation_preferences`
-7. `constraints`
+   Explain briefly that `starter` is shorter and simpler, while `representative` is longer and more workflow-heavy.
+5. `feasibility`
+   Explain briefly that `runnable` means solvable in the current environment, `impossible` means the correct behavior is to recognize failure, and `mixed` means generate both.
+6. `difficulties`
+7. `variation_preferences`
+8. `constraints`
 
-Do not ask for predicates, setup details, target keys, or max steps unless they are truly necessary to resolve an ambiguity.
+Do not ask for predicates, targets, or max steps unless the ambiguity is real.
 Infer those from the codebase whenever possible.
-
-Only write a normalized request block after enough information has been collected to design families and generate a batch.
 
 ```md
 ### Normalized Request
@@ -60,12 +57,11 @@ Only write a normalized request block after enough information has been collecte
 - count:
 - splits:
 - difficulties:
+- feasibility:
 - variation_preferences:
 - constraints:
 - assumptions:
 ```
-
-If information is still missing after the first answer, ask again instead of forcing assumptions too early.
 
 ## Step 1 — Read context first
 
@@ -75,23 +71,28 @@ Read these files before doing anything else:
 - `doc/task/task-expansion-spec.md`
 - `doc/task/tasks-and-perturbations.md`
 - `doc/task/task-hub.md`
+- `doc/personal/20260410_osworld_impossible_tasks.md`
 - `packages/core/src/types.ts`
 - `packages/core/src/env/evaluator.ts`
+- `packages/core/src/env/session.ts`
 - `packages/core/src/tasks/starter-tasks.ts`
 - `packages/core/src/tasks/representative-tasks.ts`
 - `packages/core/src/tasks/registry.ts`
 - `AGENTS.md`
 - [references/repo-task-workflow.md](references/repo-task-workflow.md)
 
+Treat `doc/personal/20260410_osworld_impossible_tasks.md` as the policy anchor for intentionally impossible tasks.
+
 ## Step 2 — Expand the request into task families
 
 Before designing individual tasks, infer the smallest useful set of task families.
 For each family, decide:
 
-- target split and domain
+- split and domain
 - source app and sink app
 - intended workflow shape
-- candidate goal and progress predicates
+- feasibility mode: `runnable` or `impossible`
+- candidate predicates and progress chain
 - default setup pattern
 - allowed variation axes
 - expected difficulty band
@@ -99,10 +100,17 @@ For each family, decide:
 Family-first generation is mandatory for large batches.
 Do not jump directly from a short request to a flat list of task IDs.
 
+For impossible-task families, explicitly state why the task cannot be completed:
+
+- removed or deprecated feature
+- nonexistent file, data, or resource
+- logically contradictory instruction
+- hallucinated capability outside the current environment
+
 ## Step 3 — Build a variation matrix
 
 Generate candidate tasks by expanding each family across a bounded variation matrix.
-Use only the current implementation surface.
+Use only the current implementation surface unless the user explicitly allows runtime expansion.
 Perturbations are out of scope for this skill version.
 
 Preferred variation axes:
@@ -114,18 +122,11 @@ Preferred variation axes:
 - `distractor count`
 - `layout`
 - `initial selected item`
-
-Default difficulty semantics:
-
-- `easy`: short horizon, simple setup, low distractor count, favorable focus
-- `medium`: 2-3 step workflow, moderate distractors, less favorable initial state
-- `hard`: longer multi-step workflow, less favorable initial state, more distractors
-
-If the user asks for multiple difficulties at once, generate a mixed batch from the same family inventory.
+- `impossibility reason` for impossible-task families
 
 ## Step 4 — Dedup gate and quality rubric
 
-Every candidate task must pass both gates before implementation.
+Every candidate task must pass both gates before implementation or promotion.
 
 ### Dedup gate
 
@@ -135,70 +136,70 @@ Create a `task fingerprint` from:
 - split
 - domain
 - app scope
+- feasibility mode
 - goal predicates
 - progress chain
 - setup shape
 - output artifact
 - variation axes actually used
 
-Treat a candidate as a duplicate risk if two or more of these are effectively the same as an existing task:
-
-- app scope
-- goal predicate set
-- progress chain
-- source app -> sink app structure
-- setup shape
-- workflow meaning with only string substitution differences
+Treat a candidate as a duplicate risk if two or more of these are effectively the same as an existing task, including cases where the impossibility reason and observable cues are effectively identical.
 
 If duplicate risk is high, prefer one of these outcomes in order:
 
 1. absorb it into seed variation of an existing task
 2. absorb it into an existing family as a documented variation
-3. promote it to a new task only if it changes workflow meaning or setup meaning
+3. promote it to a new task only if it changes workflow meaning, setup meaning, or impossibility reasoning meaning
 
 ### Quality rubric
 
-Every candidate must pass:
+Runnable candidates must pass:
 
-- `Executable`: supported by the current reducer, app state, factory, and action surface
-- `Evaluable`: success can be judged with current predicates and targets
-- `Non-trivial`: not just a renamed or reworded copy of an existing task
-- `Instruction clarity`: the final artifact and success condition are obvious from the instruction
-- `Learning value`: observation, selection, transition, and completion are meaningfully separated
+- `Executable`
+- `Evaluable`
+- `Non-trivial`
+- `Instruction clarity`
+- `Learning value`
 
-If any rubric item fails, discard the candidate or downgrade it to family variation.
+Impossible candidates must pass:
 
-## Step 5 — Implement runnable tasks
+- `Clearly impossible`
+- `Diagnosable`
+- `No fake workaround`
+- `Abort semantics defined`
+- `Runtime path declared`
+
+## Step 5 — Implement runnable tasks, proposal-only impossible tasks, or runtime extensions
 
 The default outcome is runnable task code.
-Do not stop at a proposal unless the user explicitly asks for proposal-only output.
+Do not stop at a proposal unless the user explicitly asks for proposal-only output, or unless the request is for impossible tasks but the runtime does not support them yet.
 
-Implementation rules:
+Important current-runtime limitation:
 
-- add or update deterministic `build*Task` setup functions
-- add `TaskSpec` entries in the correct task file
-- keep `goalPredicates` minimal
-- keep `progressPredicates` ordered and meaningful
-- keep `forbiddenPredicates` empty unless the failure state is already supported
-- reuse existing `targets` key names whenever possible
-- keep `seedDefaults` at `[0, 1, 2]` unless the user asks otherwise
+- The current session flow treats `FAIL` as a small negative-reward terminal action.
+- Therefore, intentionally impossible tasks are not currently runnable as correct-by-`FAIL` tasks without runtime changes.
 
-A task counts as runnable only if:
+Decision rule:
 
-- it is registered in the task inventory
-- its setup is deterministic
-- its predicates are evaluable in the current environment
-- it can be loaded through the existing task registry and session flow
+1. If the user wants impossible-task ideas only, generate proposal-only impossible tasks and document the intended abort behavior.
+2. If the user wants impossible tasks to be runnable in the environment, extend the evaluator/session/reward contract first, then add the task definitions.
+3. If the user did not authorize runtime expansion, do not silently fake runnable impossible tasks.
+
+A runnable task counts as complete only if it is registered, deterministic, evaluable, and loadable through the current registry/session flow.
+A runnable impossible task counts as complete only if the runtime has explicit success semantics for recognized impossibility and the expected abort path is testable.
 
 ## Step 6 — Sync docs and inventory
 
-Update these in the same change when task inventory changes:
+Update these in the same change when task inventory or generation policy changes:
 
 - `doc/task/task-hub.md`
 - `doc/task/tasks-and-perturbations.md`
 - `AGENTS.md` when the visible task inventory or workflow guidance changed
 - `doc/task/task-expansion-spec.md` when generation policy or taxonomy changed
 - `doc/task/ai-task-prompt-template.md` when the request schema or output schema changed
+
+When updating task docs, write explanatory task descriptions in Korean.
+If you need to preserve the exact `TaskSpec.instruction`, keep it as a raw original-string column.
 
 ## Step 7 — Validate the batch
 
@@ -207,36 +208,30 @@ When task code changes, prefer:
 - `npm run build`
 - `npm test`
 - `npm run qa:representative` when representative behavior changed materially
-- `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode inventory` to audit the current inventory
-- `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode candidates --input <candidate-json>` before promoting a generated batch
+- `node .claude/skills/task-author/scripts/audit-task-batch.mjs --mode inventory`
+- `node .claude/skills/task-author/scripts/audit-task-batch.mjs --mode candidates --input <candidate-json>`
 
-If only docs or skill files changed, consistency review is sufficient.
+If the work only changes docs or skill files, consistency review is sufficient.
+If you add runnable impossible-task support, include validation that proves the intended abort path is rewarded correctly.
 
 ## Authoring rules
 
 - Stay inside the current reducer, evaluator, and app behavior unless the request explicitly allows expansion
 - Treat `constraints` and excluded features as hard limits
-- Prefer partial high-level input and gather missing information conversationally
-- Ask follow-up questions multiple times when the current request is not decision-complete
-- Do not demand a full schema from the user before continuing
 - Prefer family expansion over isolated task invention
 - Prefer batch diversity over raw count inflation
 - Do not use perturbations in this skill version
+- Do not claim impossible tasks are runnable unless the runtime contract has actually been extended
 
 ## Final response must include
 
 - implemented or changed task IDs with `instruction` shown in the summary table
-  - The summary table MUST include an `Instruction` column displaying the `TaskSpec.instruction` value for every task
-  - Example format:
-    ```
-    | # | ID | Split | Level | Instruction |
-    |---|---|---|---|---|
-    | 1 | `browser_switch_to_help` | starter | A | In Firefox, switch to the Ubuntu help tab. |
-    ```
 - family assignment for the batch
+- feasibility mode for the batch: `runnable`, `impossible`, or `mixed`
 - variation summary
 - why the new tasks are not duplicates
 - coverage impact
-- whether evaluator or predicate space changed
+- whether evaluator, predicate space, or session reward logic changed
+- whether impossible tasks are proposal-only or runnable
 - which docs were updated
 - what validation ran
