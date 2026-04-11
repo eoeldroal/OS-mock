@@ -4,13 +4,14 @@
 
 이 문서는 현재 `OS-mock` 코드베이스를 기준으로, 실제로 구현 가능한 태스크를 고품질로 여러 개 확장하기 위한 작성 규약을 정리한다.
 
-이 명세의 목표는 세 가지다.
+이 명세의 목표는 네 가지다.
 
-- 현재 환경에서 실제로 풀 수 있는 태스크만 정의한다.
+- 기본적으로는 현재 환경에서 실제로 풀 수 있는 태스크를 정의한다.
+- 필요하면 의도적으로 불가능한 태스크도 별도 정책 아래 설계할 수 있게 한다.
 - 적은 수의 family와 variation 규칙으로 100개 이상 수준의 태스크 인벤토리로 확장할 수 있게 한다.
 - 대량 생성 시에도 중복과 품질 저하를 막는다.
 
-이 문서는 `OSWorld`를 그대로 복제하기 위한 명세가 아니다. 현재의 deterministic mock desktop이 제공하는 앱, 상태, evaluator, action surface 안에서 안정적으로 학습/평가가 가능한 태스크를 설계하기 위한 명세다.
+이 문서는 `OSWorld`를 그대로 복제하기 위한 명세가 아니다. 현재의 deterministic mock desktop이 제공하는 앱, 상태, evaluator, action surface 안에서 안정적으로 학습/평가가 가능한 태스크를 설계하기 위한 명세다. 기본값은 runnable task지만, `doc/personal/20260410_osworld_impossible_tasks.md`를 참고해 intentionally impossible task도 설계할 수 있다.
 
 ---
 
@@ -33,6 +34,13 @@
 - 단순히 UI를 보여주는 데 그치지 않고, 관측 -> 선택 -> 상태 전이 -> 평가가 분명해야 한다.
 - `progressPredicates`가 중간 체크포인트로 작동하도록 설계하는 것이 좋다.
 - instruction만 읽고 최종 산출물이 명확해야 한다.
+
+### 2.5 intentionally impossible task의 추가 조건
+- 불가능성은 환경 현실에 기반해야 하며, 단순히 instruction이 모호해서는 안 된다.
+- removed/deprecated feature, 존재하지 않는 데이터/파일/리소스, 현재 mockOS에 없는 capability, 논리적으로 모순되는 요구처럼 이유가 분명해야 한다.
+- 에이전트가 짧은 탐색만으로도 불가능성을 진단할 수 있어야 한다.
+- 현재 런타임은 `FAIL`을 정답으로 보상하지 않으므로, runnable impossible task를 원하면 evaluator/session/reward contract를 먼저 확장해야 한다.
+- 런타임 확장이 없는 경우 impossible task는 proposal-only 설계 산출물로 다뤄야 한다.
 
 ---
 
@@ -57,6 +65,8 @@
 - `WAIT`
 - `FAIL`
 - `DONE`
+
+현재 `FAIL` action은 존재하지만, 아직 impossible task의 정답 행동으로 채점되지는 않는다.
 
 실제로 태스크 설계에 주로 쓰이는 것은 아래다.
 
@@ -145,7 +155,7 @@
 - `mail.message_opened`
 - `terminal.command_ran`
 
-이 predicate 집합이 곧 현재 task space의 상한선이다. 더 다양한 태스크를 만들고 싶다면, 결국 evaluator predicate를 먼저 늘려야 한다.
+이 predicate 집합이 곧 현재 runnable task space의 상한선이다. 더 다양한 태스크를 만들고 싶다면, 결국 evaluator predicate를 먼저 늘려야 한다. impossible task를 runnable하게 만들고 싶을 때도 같은 원칙이 적용된다.
 
 ---
 
@@ -168,6 +178,7 @@
 - `count`
 - `splits`
 - `difficulties`
+- `feasibility` (`runnable`, `impossible`, `mixed`)
 - `variation preferences`
 - `constraints`
 
@@ -178,9 +189,10 @@
 2. `apps`
 3. `count`
 4. `splits`
-5. `difficulties`
-6. `variation preferences`
-7. `constraints`
+5. `feasibility`
+6. `difficulties`
+7. `variation preferences`
+8. `constraints`
 
 `workflow`, `predicates`, `required setup`, `targets`는 AI가 코드베이스를 보고 추론하는 것이 기본이다.
 고객 입력이 부족하더라도 곧바로 상세 스키마를 요구하지 말고, high-impact 질문부터 순차적으로 물어야 한다.
@@ -195,6 +207,7 @@
 - layout
 - initial selected item
 - difficulty
+- impossibility reason
 
 한 batch에서는 content variation만 반복하지 말고, setup variation까지 함께 섞는 것이 좋다.
 
@@ -209,6 +222,7 @@
 - split
 - domain
 - app scope
+- feasibility
 - goal predicate set
 - progress chain
 - setup shape
@@ -223,6 +237,7 @@
 - 같은 setup shape
 - 같은 output artifact
 - 문자열만 바뀌고 workflow 의미는 동일
+- impossible task라면 불가능성 이유와 관측 단서도 사실상 동일
 
 처리 우선순위:
 
@@ -234,13 +249,21 @@
 
 ## 7. Quality rubric
 
-신규 task는 아래를 모두 만족해야 한다.
+신규 task는 feasibility에 따라 아래를 만족해야 한다.
 
+### Runnable task rubric
 - `Executable`: reducer/app/factory 안에서 실제 수행 가능
 - `Evaluable`: 현재 predicate와 targets로 성공 판정 가능
 - `Non-trivial`: 기존 task의 단순 문구 치환이 아님
 - `Instruction clarity`: instruction만 읽고 최종 산출물이 분명함
 - `Learning value`: 관측, 선택, 상태 전이, 완료가 의미 있게 분리됨
+
+### Impossible task rubric
+- `Clearly impossible`: 환경 현실상 불가능한 이유가 분명함
+- `Diagnosable`: 짧은 탐색만으로도 불가능성을 확인할 수 있음
+- `No fake workaround`: 에이전트가 환각으로 성공을 꾸며낼 여지를 줄임
+- `Abort semantics defined`: 올바른 종료 행동이 `FAIL` 등으로 명시됨
+- `Runtime path declared`: proposal-only인지, runnable하게 만들기 위해 evaluator/session을 확장했는지 분명함
 
 하나라도 실패하면 candidate를 버리거나 family variation으로 낮춘다.
 
