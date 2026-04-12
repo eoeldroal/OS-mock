@@ -1,19 +1,23 @@
 import type { TaskSpec } from "../types.js";
 import { REPRESENTATIVE_TASKS } from "./representative-tasks.js";
 import { STARTER_TASKS } from "./starter-tasks.js";
+import { FILES_WINDOW_TASKS } from "./files-window-tasks.js";
 
 export type TaskSplit = "all" | "starter" | "representative" | "train" | "eval";
 
-export const ALL_TASKS: TaskSpec[] = [...STARTER_TASKS, ...REPRESENTATIVE_TASKS];
+const FW_STARTER = FILES_WINDOW_TASKS.filter((t) => t.split === "starter");
+const FW_REPRESENTATIVE = FILES_WINDOW_TASKS.filter((t) => t.split === "representative");
+
+export const ALL_TASKS: TaskSpec[] = [...STARTER_TASKS, ...REPRESENTATIVE_TASKS, ...FILES_WINDOW_TASKS];
 
 const TASK_MAP = new Map<string, TaskSpec>(ALL_TASKS.map((task) => [task.id, task]));
 
 function resolveTasks(split: TaskSplit = "all") {
   if (split === "starter") {
-    return STARTER_TASKS;
+    return [...STARTER_TASKS, ...FW_STARTER];
   }
   if (split === "representative" || split === "train" || split === "eval") {
-    return REPRESENTATIVE_TASKS;
+    return [...REPRESENTATIVE_TASKS, ...FW_REPRESENTATIVE];
   }
   return ALL_TASKS;
 }
