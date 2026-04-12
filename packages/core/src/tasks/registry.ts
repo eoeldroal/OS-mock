@@ -7,7 +7,7 @@ import {
   // --- [초기 5개] ---
   mailExtractInvoiceTask,
   terminalListDirTask,
-  terminalRecordWorkingDirectoryTask,
+  team3TerminalRecordWorkingDirectoryTask,
   terminalCatAndSaveConfigTask,
   mailRecordSenderAddressTask,
   
@@ -65,7 +65,7 @@ export const ALL_TASKS: TaskSpec[] = [
   // --- [Team 3 Custom Tasks (1~25)] ---
   mailExtractInvoiceTask,
   terminalListDirTask,
-  terminalRecordWorkingDirectoryTask,
+  team3TerminalRecordWorkingDirectoryTask,
   terminalCatAndSaveConfigTask,
   mailRecordSenderAddressTask,
   mailExtractResetLinkTask,

@@ -1,4 +1,37 @@
-import type { TaskSpec, Viewport, EnvState } from "../types.js";
+import type { FileEntry, TaskSpec, Viewport, EnvState } from "../types.js";
+
+// ============================================================================
+// [공통 헬퍼] 채점 규약(evaluator.ts)과 맞춘 targets + 파일 등록
+// ============================================================================
+function team3NoteTargets(targetFileId: string, expectedSavedContent: string) {
+  return {
+    targetFileId,
+    appendText: expectedSavedContent,
+    expectedSavedContent
+  };
+}
+
+function addTeam3File(env: EnvState, file: FileEntry): EnvState {
+  const next = structuredClone(env);
+  next.fileSystem.files[file.id] = file;
+  if (!next.fileSystem.order.includes(file.id)) {
+    next.fileSystem.order.push(file.id);
+  }
+  return next;
+}
+
+/** mock 터미널 ls 출력과 동일 (파일 표시명을 공백 두 칸으로 연결) */
+function lsOutputFromEnv(env: EnvState): string {
+  return env.fileSystem.order
+    .map((id) => env.fileSystem.files[id]?.name)
+    .filter(Boolean)
+    .join("  ");
+}
+
+/** mock 터미널 cat 의 lastOutput 과 동일 */
+function catCommandOutput(fileContent: string): string {
+  return fileContent.split("\n").join("\n");
+}
 
 // ============================================================================
 // [공통 헬퍼] 가상 OS의 기초 상태를 생성하는 함수
@@ -28,7 +61,7 @@ function createBaseEnv(viewport: Viewport): EnvState {
 // 1. seedDefaults 확장 + setup 함수 내 seed 파라미터 실제 활용
 // 2. split을 난이도 기반으로 재분류 (starter / representative / eval)
 // 3. 주요 task에 forbiddenPredicates 추가
-// 4. ls 출력 targetText를 "\n" 구분으로 통일 (실제 ls 출력 형식)
+// 4. ls 채점은 mock 터미널과 동일하게 파일명을 공백 두 칸으로 연결한 한 줄 출력 사용
 // ============================================================================
 
 
@@ -40,7 +73,8 @@ export const mailExtractInvoiceTask: TaskSpec = {
   id: "mail_extract_invoice_amount",
   split: "starter",
   domain: "Thunderbird + Note Editor",
-  instruction: "Open Thunderbird, find the email with the subject 'Invoice #{{invoiceId}}', extract the total amount due, and save it into a new note named 'invoice_summary.txt'.",
+  instruction:
+    "Open Thunderbird, find the invoice email, extract the total amount due, and save it into a new note named 'invoice_summary.txt'.",
   maxSteps: 15,
   seedDefaults: [0, 1, 2],
 
@@ -51,7 +85,15 @@ export const mailExtractInvoiceTask: TaskSpec = {
       { invoiceId: "388", amount: "$780.00", sender: "accounts@osmock.com" },
     ];
     const v = invoiceVariants[seed % invoiceVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t1-invoice-note";
+    let envState = createBaseEnv(viewport);
+    envState.instruction = `Open Thunderbird, find the email with the subject 'Invoice #${v.invoiceId}', extract the total amount due, and save it into a new note named 'invoice_summary.txt'.`;
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "invoice_summary.txt",
+      content: "",
+      path: `/home/user/invoice_summary.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -65,7 +107,10 @@ export const mailExtractInvoiceTask: TaskSpec = {
 
     return {
       envState,
-      targets: { targetNoteName: "invoice_summary.txt", targetText: v.amount }
+      targets: {
+        ...team3NoteTargets(noteFileId, v.amount),
+        targetMessageId: `msg-inv-${seed}`
+      }
     };
   },
   goalPredicates: ["note.saved"],
@@ -76,7 +121,7 @@ export const mailExtractInvoiceTask: TaskSpec = {
 // ============================================================================
 // Task 2: 터미널 파일 목록 저장 [starter]
 // seed variation: 디렉토리 경로, 파일 목록
-// 개선: targetText를 "\n" 구분으로 통일
+// 노트에는 디렉터리 파일 목록을 줄바꿈으로 기록 (mock ls 출력과는 별개)
 // ============================================================================
 export const terminalListDirTask: TaskSpec = {
   id: "terminal_list_directory_contents",
@@ -102,18 +147,34 @@ export const terminalListDirTask: TaskSpec = {
       },
     ];
     const v = dirVariants[seed % dirVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t2-dir-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = v.cwd;
     envState.appStates.terminalLite["terminal1"].cwd = v.cwd;
-    envState.fileSystem.files = Object.fromEntries(
-      v.files.map((name, i) => [name, { id: `f${i}`, name, path: `${v.cwd}/${name}`, content: "" }])
-    );
-    envState.fileSystem.order = v.files;
+    const scenarioFiles: FileEntry[] = v.files.map((name, i) => ({
+      id: `team3-t2-s${i}`,
+      name,
+      path: `${v.cwd}/${name}`,
+      content: ""
+    }));
+    envState.fileSystem.files = Object.fromEntries(scenarioFiles.map((f) => [f.id, f]));
+    envState.fileSystem.order = scenarioFiles.map((f) => f.id);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "dir_contents.txt",
+      content: "",
+      path: `${v.cwd}/dir_contents.txt`
+    });
+    const expectedNote = v.files.join("\n");
 
     return {
       envState,
-      targets: { targetNoteName: "dir_contents.txt", targetText: v.files.join("\n") }
+      targets: {
+        ...team3NoteTargets(noteFileId, expectedNote),
+        targetCommand: "ls",
+        targetCommandOutput: lsOutputFromEnv(envState)
+      }
     };
   },
   goalPredicates: ["note.saved"],
@@ -125,11 +186,12 @@ export const terminalListDirTask: TaskSpec = {
 // Task 3: 현재 작업 디렉토리 경로 기록 [starter]
 // seed variation: 경로 깊이 및 경로명
 // ============================================================================
-export const terminalRecordWorkingDirectoryTask: TaskSpec = {
-  id: "terminal_record_working_directory",
+export const team3TerminalRecordWorkingDirectoryTask: TaskSpec = {
+  id: "team3_terminal_record_working_directory",
   split: "starter",
   domain: "Terminal + Note Editor",
-  instruction: "Open Terminal, execute the command to print the current working directory, and save the absolute path to 'cwd_log.txt'.",
+  instruction:
+    "Open Terminal, execute the command to print the current working directory, and save the absolute path to 'cwd_log.txt'.",
   maxSteps: 12,
   seedDefaults: [0, 1, 2],
 
@@ -140,14 +202,25 @@ export const terminalRecordWorkingDirectoryTask: TaskSpec = {
       "/var/www/html/public/assets",
     ];
     const specificPath = pathVariants[seed % pathVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t3-cwd-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = specificPath;
     envState.appStates.terminalLite["terminal1"].cwd = specificPath;
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "cwd_log.txt",
+      content: "",
+      path: `${specificPath}/cwd_log.txt`
+    });
 
     return {
       envState,
-      targets: { targetNoteName: "cwd_log.txt", targetText: specificPath }
+      targets: {
+        ...team3NoteTargets(noteFileId, specificPath),
+        targetCommand: "pwd",
+        targetCommandOutput: specificPath
+      }
     };
   },
   goalPredicates: ["note.saved"],
@@ -174,22 +247,37 @@ export const terminalCatAndSaveConfigTask: TaskSpec = {
       { port: "5000", host: "0.0.0.0" },
     ];
     const v = configVariants[seed % configVariants.length];
-    const envState = createBaseEnv(viewport);
     const cwd = "/home/user";
+    const noteFileId = "team3-t4-port-note";
+    const configContent = `{\n  "host": "${v.host}",\n  "port": ${v.port}\n}`;
+    const configFileId = "team3-t4-conf";
+    let envState = createBaseEnv(viewport);
 
+    envState.fileSystem.cwd = cwd;
+    envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "server_config.json": {
-        id: "conf1",
+      [configFileId]: {
+        id: configFileId,
         name: "server_config.json",
         path: `${cwd}/server_config.json`,
-        content: `{\n  "host": "${v.host}",\n  "port": ${v.port}\n}`
+        content: configContent
       }
     };
-    envState.fileSystem.order = ["server_config.json"];
+    envState.fileSystem.order = [configFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "port_backup.txt",
+      content: "",
+      path: `${cwd}/port_backup.txt`
+    });
 
     return {
       envState,
-      targets: { targetNoteName: "port_backup.txt", targetText: v.port }
+      targets: {
+        ...team3NoteTargets(noteFileId, v.port),
+        targetCommand: "cat server_config.json",
+        targetCommandOutput: catCommandOutput(configContent)
+      }
     };
   },
   goalPredicates: ["note.saved"],
@@ -216,7 +304,14 @@ export const mailRecordSenderAddressTask: TaskSpec = {
       { sender: "director@osmock.local", name: "Director" },
     ];
     const v = senderVariants[seed % senderVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t5-contacts-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "contacts.txt",
+      content: "",
+      path: `/home/user/contacts.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 2 }];
     envState.appStates.mailLite["mail1"].messages = [
@@ -240,7 +335,10 @@ export const mailRecordSenderAddressTask: TaskSpec = {
 
     return {
       envState,
-      targets: { targetNoteName: "contacts.txt", targetText: v.sender }
+      targets: {
+        ...team3NoteTargets(noteFileId, v.sender),
+        targetMessageId: `msg-target-${seed}`
+      }
     };
   },
   goalPredicates: ["note.saved"],
@@ -266,7 +364,15 @@ export const mailExtractResetLinkTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const tokens = ["token123", "abc789xyz", "zz991reset"];
     const token = tokens[seed % tokens.length];
-    const envState = createBaseEnv(viewport);
+    const expected = `https://osmock.com/reset/${token}`;
+    const noteFileId = "team3-t6-reset-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "reset_link.txt",
+      content: "",
+      path: `/home/user/reset_link.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -275,10 +381,13 @@ export const mailExtractResetLinkTask: TaskSpec = {
       sender: "security@osmock.com",
       subject: "Password Reset Request",
       preview: "Click the link below to reset your password.",
-      body: ["Hello,", "Click the link below to reset your password:", `https://osmock.com/reset/${token}`, "If you didn't request this, ignore this email."]
+      body: ["Hello,", "Click the link below to reset your password:", expected, "If you didn't request this, ignore this email."]
     }];
 
-    return { envState, targets: { targetNoteName: "reset_link.txt", targetText: `https://osmock.com/reset/${token}` } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, expected), targetMessageId: `msg-reset-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -302,7 +411,14 @@ export const mailExtractMeetingTimeTask: TaskSpec = {
       { when: "Wednesday, 9:30 AM" },
     ];
     const v = meetings[seed % meetings.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t7-meeting-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "meeting_time.txt",
+      content: "",
+      path: `/home/user/meeting_time.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -314,7 +430,10 @@ export const mailExtractMeetingTimeTask: TaskSpec = {
       body: ["Event: Weekly Team Sync", `When: ${v.when}`, "Where: Virtual Room 1", "Please be on time."]
     }];
 
-    return { envState, targets: { targetNoteName: "meeting_time.txt", targetText: v.when } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.when), targetMessageId: `msg-sync-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -327,7 +446,8 @@ export const mailExtractTrackingTask: TaskSpec = {
   id: "mail_extract_tracking_info",
   split: "representative",
   domain: "Thunderbird + Note Editor",
-  instruction: "Open Thunderbird, find the email for 'Order #{{orderId}}', extract the tracking number, and save it to 'tracking_info.txt'.",
+  instruction:
+    "Open Thunderbird, find the order shipment email, extract the tracking number, and save it to 'tracking_info.txt'.",
   maxSteps: 15,
   seedDefaults: [0, 1, 2],
 
@@ -338,7 +458,15 @@ export const mailExtractTrackingTask: TaskSpec = {
       { orderId: "7701", tracking: "ZD345678" },
     ];
     const v = orderVariants[seed % orderVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t8-track-note";
+    let envState = createBaseEnv(viewport);
+    envState.instruction = `Open Thunderbird, find the email for 'Order #${v.orderId}', extract the tracking number, and save it to 'tracking_info.txt'.`;
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "tracking_info.txt",
+      content: "",
+      path: `/home/user/tracking_info.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 3 }];
     envState.appStates.mailLite["mail1"].messages = [
@@ -347,7 +475,10 @@ export const mailExtractTrackingTask: TaskSpec = {
       { id: "msg-d2", folderId: "inbox", sender: "spam@spam.com", subject: "Win a free phone", preview: "Click here to win.", body: ["You are a winner."] }
     ];
 
-    return { envState, targets: { targetNoteName: "tracking_info.txt", targetText: v.tracking } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.tracking), targetMessageId: `msg-target-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -372,7 +503,14 @@ export const mailExtractSpamSenderTask: TaskSpec = {
       "notice@revenue-mock.com",
     ];
     const sender = senders[seed % senders.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t9-tax-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "tax_sender.txt",
+      content: "",
+      path: `/home/user/tax_sender.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [
       { id: "inbox", name: "Inbox", unread: 0 },
@@ -387,7 +525,10 @@ export const mailExtractSpamSenderTask: TaskSpec = {
       body: ["This message was flagged as spam.", `Sender: ${sender}`, "Please whitelist this address."]
     }];
 
-    return { envState, targets: { targetNoteName: "tax_sender.txt", targetText: sender } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, sender), targetMessageId: `msg-tax-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -407,7 +548,14 @@ export const mailExtract2faCodeTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const codes = ["849201", "372910", "561083"];
     const code = codes[seed % codes.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t10-2fa-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "2fa.txt",
+      content: "",
+      path: `/home/user/2fa.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -419,7 +567,10 @@ export const mailExtract2faCodeTask: TaskSpec = {
       body: ["Hello,", "Here is your temporary login code:", code, "It expires in 10 minutes."]
     }];
 
-    return { envState, targets: { targetNoteName: "2fa.txt", targetText: code } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, code), targetMessageId: `msg-2fa-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -447,16 +598,32 @@ export const terminalCatEnvPasswordTask: TaskSpec = {
     const pw = passwords[seed % passwords.length];
     const port = ports[seed % ports.length];
     const cwd = "/var/www/project";
-    const envState = createBaseEnv(viewport);
+    const envContent = `DB_USER=admin\nDB_PASSWORD=${pw}\nPORT=${port}`;
+    const envFileId = "team3-t11-env";
+    const noteFileId = "team3-t11-dbpass-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      ".env": { id: "f-env", name: ".env", path: `${cwd}/.env`, content: `DB_USER=admin\nDB_PASSWORD=${pw}\nPORT=${port}` }
+      [envFileId]: { id: envFileId, name: ".env", path: `${cwd}/.env`, content: envContent }
     };
-    envState.fileSystem.order = [".env"];
+    envState.fileSystem.order = [envFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "db_pass.txt",
+      content: "",
+      path: `${cwd}/db_pass.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "db_pass.txt", targetText: pw } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, pw),
+        targetCommand: "cat .env",
+        targetCommandOutput: catCommandOutput(envContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -477,16 +644,32 @@ export const terminalCatLogErrorCodeTask: TaskSpec = {
     const errorCodes = ["ERR_CONNECTION_REFUSED", "ERR_TIMEOUT", "ERR_NOT_FOUND"];
     const errorCode = errorCodes[seed % errorCodes.length];
     const cwd = "/var/log/nginx";
-    const envState = createBaseEnv(viewport);
+    const logContent = `[INFO] Server started\n[ERROR] Code: ${errorCode}\n[INFO] Restarting`;
+    const logFileId = "team3-t12-log";
+    const noteFileId = "team3-t12-err-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "error.log": { id: "f-log", name: "error.log", path: `${cwd}/error.log`, content: `[INFO] Server started\n[ERROR] Code: ${errorCode}\n[INFO] Restarting` }
+      [logFileId]: { id: logFileId, name: "error.log", path: `${cwd}/error.log`, content: logContent }
     };
-    envState.fileSystem.order = ["error.log"];
+    envState.fileSystem.order = [logFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "last_error.txt",
+      content: "",
+      path: `${cwd}/last_error.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "last_error.txt", targetText: errorCode } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, errorCode),
+        targetCommand: "cat error.log",
+        targetCommandOutput: catCommandOutput(logContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -495,7 +678,7 @@ export const terminalCatLogErrorCodeTask: TaskSpec = {
 
 // Task 13: 특수 디렉토리에서 ls 결과 저장 [representative]
 // seed variation: 디렉토리, 파일 목록
-// 개선: targetText를 "\n" 구분으로 통일
+// 노트에는 디렉터리 파일 목록을 줄바꿈으로 기록 (mock ls 출력과는 별개)
 export const terminalListLogDirTask: TaskSpec = {
   id: "terminal_list_log_directory",
   split: "representative",
@@ -511,16 +694,34 @@ export const terminalListLogDirTask: TaskSpec = {
       { cwd: "/var/log/app", files: ["app.log", "debug.log", "warn.log"] },
     ];
     const v = dirVariants[seed % dirVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t13-logdir-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = v.cwd;
     envState.appStates.terminalLite["terminal1"].cwd = v.cwd;
-    envState.fileSystem.files = Object.fromEntries(
-      v.files.map((name, i) => [name, { id: `f-log${i}`, name, path: `${v.cwd}/${name}`, content: "" }])
-    );
-    envState.fileSystem.order = v.files;
+    const scenarioFiles: FileEntry[] = v.files.map((name, i) => ({
+      id: `team3-t13-s${i}`,
+      name,
+      path: `${v.cwd}/${name}`,
+      content: ""
+    }));
+    envState.fileSystem.files = Object.fromEntries(scenarioFiles.map((f) => [f.id, f]));
+    envState.fileSystem.order = scenarioFiles.map((f) => f.id);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "log_files.txt",
+      content: "",
+      path: `${v.cwd}/log_files.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "log_files.txt", targetText: v.files.join("\n") } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.files.join("\n")),
+        targetCommand: "ls",
+        targetCommandOutput: lsOutputFromEnv(envState)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -541,16 +742,32 @@ export const terminalCatCsvEmailTask: TaskSpec = {
     const adminEmails = ["admin@osmock.local", "root@osmock.local", "sysadmin@osmock.local"];
     const email = adminEmails[seed % adminEmails.length];
     const cwd = "/home/user/data";
-    const envState = createBaseEnv(viewport);
+    const csvContent = `role,email,id\nadmin,${email},1\nguest,guest@osmock.local,2`;
+    const csvFileId = "team3-t14-csv";
+    const noteFileId = "team3-t14-email-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "users.csv": { id: "f-csv", name: "users.csv", path: `${cwd}/users.csv`, content: `role,email,id\nadmin,${email},1\nguest,guest@osmock.local,2` }
+      [csvFileId]: { id: csvFileId, name: "users.csv", path: `${cwd}/users.csv`, content: csvContent }
     };
-    envState.fileSystem.order = ["users.csv"];
+    envState.fileSystem.order = [csvFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "admin_email.txt",
+      content: "",
+      path: `${cwd}/admin_email.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "admin_email.txt", targetText: email } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, email),
+        targetCommand: "cat users.csv",
+        targetCommandOutput: catCommandOutput(csvContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -574,14 +791,28 @@ export const terminalRecordDeepPwdTask: TaskSpec = {
       { path: "/opt/services/os-mock/dist/lib", history: ["cd /opt", "ls -la", "cd services/os-mock/dist/lib", "node server.js"] },
     ];
     const v = pathVariants[seed % pathVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t15-deep-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = v.path;
     envState.appStates.terminalLite["terminal1"].cwd = v.path;
     envState.appStates.terminalLite["terminal1"].executedCommands = v.history;
     envState.appStates.terminalLite["terminal1"].lines = v.history.map(cmd => `user@os-mock:~$ ${cmd}`);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "current_path.txt",
+      content: "",
+      path: `${v.path}/current_path.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "current_path.txt", targetText: v.path } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.path),
+        targetCommand: "pwd",
+        targetCommandOutput: v.path
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -607,7 +838,15 @@ export const mailExtractTrashLinkTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const linkIds = ["99887766", "11223344", "55667788"];
     const linkId = linkIds[seed % linkIds.length];
-    const envState = createBaseEnv(viewport);
+    const expected = `https://zoom.us/j/${linkId}`;
+    const noteFileId = "team3-t16-zoom-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "recovered_link.txt",
+      content: "",
+      path: `/home/user/recovered_link.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [
       { id: "inbox", name: "Inbox", unread: 0 },
@@ -619,10 +858,13 @@ export const mailExtractTrashLinkTask: TaskSpec = {
       sender: "system@osmock.local",
       subject: "Canceled: Sync",
       preview: "The meeting has been canceled.",
-      body: ["Event canceled.", `Original link: https://zoom.us/j/${linkId}`, "Do not join."]
+      body: ["Event canceled.", `Original link: ${expected}`, "Do not join."]
     }];
 
-    return { envState, targets: { targetNoteName: "recovered_link.txt", targetText: `https://zoom.us/j/${linkId}` } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, expected), targetMessageId: `msg-trash-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -646,7 +888,14 @@ export const mailExtractMessyReceiptTask: TaskSpec = {
       { subtotal: "$2400.00", tax: "$192.00", total: "$2592.00" },
     ];
     const v = receiptVariants[seed % receiptVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t17-receipt-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "receipt_total.txt",
+      content: "",
+      path: `/home/user/receipt_total.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -658,7 +907,10 @@ export const mailExtractMessyReceiptTask: TaskSpec = {
       body: ["=== RECEIPT ===", `Subtotal: ${v.subtotal}`, `Tax (8%): ${v.tax}`, "-----------------", `Total: ${v.total}`, "Thank you!"]
     }];
 
-    return { envState, targets: { targetNoteName: "receipt_total.txt", targetText: v.total } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.total), targetMessageId: `msg-receipt-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -682,7 +934,14 @@ export const mailExtractFlightPnrTask: TaskSpec = {
       { pnr: "P9Q8R7", flight: "OZ789", dest: "CDG" },
     ];
     const v = flightVariants[seed % flightVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t18-pnr-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "flight_pnr.txt",
+      content: "",
+      path: `/home/user/flight_pnr.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -694,7 +953,10 @@ export const mailExtractFlightPnrTask: TaskSpec = {
       body: ["Booking Confirmed!", "Passenger: J. Doe", `Booking Reference (PNR): ${v.pnr}`, `Flight: ${v.flight} to ${v.dest}`, "Have a safe trip."]
     }];
 
-    return { envState, targets: { targetNoteName: "flight_pnr.txt", targetText: v.pnr } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.pnr), targetMessageId: `msg-flight-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -714,7 +976,14 @@ export const mailExtractExceptionNameTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const exceptions = ["NullPointerException", "IndexOutOfBoundsException", "StackOverflowError"];
     const exc = exceptions[seed % exceptions.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t19-bug-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "bug_type.txt",
+      content: "",
+      path: `/home/user/bug_type.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -726,7 +995,10 @@ export const mailExtractExceptionNameTask: TaskSpec = {
       body: ["Log snippet:", "at main.js:42", `Uncaught Java.lang.${exc}`, "Process exited with code 1."]
     }];
 
-    return { envState, targets: { targetNoteName: "bug_type.txt", targetText: exc } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, exc), targetMessageId: `msg-crash-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -746,7 +1018,14 @@ export const mailExtractSshIpTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const ips = ["192.168.1.105", "10.0.0.42", "172.16.5.200"];
     const ip = ips[seed % ips.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t20-ip-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "server_ip.txt",
+      content: "",
+      path: `/home/user/server_ip.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -758,7 +1037,10 @@ export const mailExtractSshIpTask: TaskSpec = {
       body: ["Here are your connection details:", `Host: ${ip}`, "User: root", "Port: 22", "Please change the default password."]
     }];
 
-    return { envState, targets: { targetNoteName: "server_ip.txt", targetText: ip } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, ip), targetMessageId: `msg-server-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -788,16 +1070,32 @@ export const terminalCatHiddenCredentialsTask: TaskSpec = {
     ];
     const v = credVariants[seed % credVariants.length];
     const cwd = "/home/user/.config";
-    const envState = createBaseEnv(viewport);
+    const credContent = `${v.service}=${v.key}\nAWS_KEY=AKIA123`;
+    const credFileId = "team3-t21-cred";
+    const noteFileId = "team3-t21-key-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      ".credentials": { id: "f-cred", name: ".credentials", path: `${cwd}/.credentials`, content: `${v.service}=${v.key}\nAWS_KEY=AKIA123` }
+      [credFileId]: { id: credFileId, name: ".credentials", path: `${cwd}/.credentials`, content: credContent }
     };
-    envState.fileSystem.order = [".credentials"];
+    envState.fileSystem.order = [credFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "secret_api_key.txt",
+      content: "",
+      path: `${cwd}/secret_api_key.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "secret_api_key.txt", targetText: v.key } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.key),
+        targetCommand: "cat .credentials",
+        targetCommandOutput: catCommandOutput(credContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -806,7 +1104,7 @@ export const terminalCatHiddenCredentialsTask: TaskSpec = {
 
 // Task 22: ls로 숨김 파일 포함 목록 파악 [representative]
 // seed variation: 파일 목록 구성
-// 개선: targetText를 "\n" 구분으로 통일 / ls만 지원 가정
+// 노트에는 파일명을 줄바꿈으로 기록 (mock ls 출력과는 별개)
 export const terminalListHiddenFilesTask: TaskSpec = {
   id: "terminal_list_hidden_files",
   split: "representative",
@@ -821,18 +1119,36 @@ export const terminalListHiddenFilesTask: TaskSpec = {
       [".credentials", ".npmrc", "index.ts"],
       [".env.local", ".dockerignore", "app.ts"],
     ];
-    const files = fileVariants[seed % fileVariants.length];
+    const names = fileVariants[seed % fileVariants.length];
     const cwd = "/home/user/project";
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t22-hidden-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
-    envState.fileSystem.files = Object.fromEntries(
-      files.map((name, i) => [name, { id: `f-h${i}`, name, path: `${cwd}/${name}`, content: "" }])
-    );
-    envState.fileSystem.order = files;
+    const scenarioFiles: FileEntry[] = names.map((name, i) => ({
+      id: `team3-t22-s${i}`,
+      name,
+      path: `${cwd}/${name}`,
+      content: ""
+    }));
+    envState.fileSystem.files = Object.fromEntries(scenarioFiles.map((f) => [f.id, f]));
+    envState.fileSystem.order = scenarioFiles.map((f) => f.id);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "hidden_files.txt",
+      content: "",
+      path: `${cwd}/hidden_files.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "hidden_files.txt", targetText: files.join("\n") } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, names.join("\n")),
+        targetCommand: "ls",
+        targetCommandOutput: lsOutputFromEnv(envState)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -855,21 +1171,37 @@ export const terminalCatJsonNestedTask: TaskSpec = {
     const dbPort = dbPorts[seed % dbPorts.length];
     const serverPort = serverPorts[seed % serverPorts.length];
     const cwd = "/etc/app";
-    const envState = createBaseEnv(viewport);
+    const jsonContent = `{\n  "server": {"port": ${serverPort}},\n  "database": {"host": "localhost", "port": ${dbPort}}\n}`;
+    const jsonFileId = "team3-t23-json";
+    const noteFileId = "team3-t23-dbport-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "config.json": {
-        id: "f-conf",
+      [jsonFileId]: {
+        id: jsonFileId,
         name: "config.json",
         path: `${cwd}/config.json`,
-        content: `{\n  "server": {"port": ${serverPort}},\n  "database": {"host": "localhost", "port": ${dbPort}}\n}`
+        content: jsonContent
       }
     };
-    envState.fileSystem.order = ["config.json"];
+    envState.fileSystem.order = [jsonFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "db_port.txt",
+      content: "",
+      path: `${cwd}/db_port.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "db_port.txt", targetText: dbPort } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, dbPort),
+        targetCommand: "cat config.json",
+        targetCommandOutput: catCommandOutput(jsonContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -894,16 +1226,32 @@ export const terminalCatPythonImportTask: TaskSpec = {
     ];
     const v = libraryVariants[seed % libraryVariants.length];
     const cwd = "/home/user/ai_project";
-    const envState = createBaseEnv(viewport);
+    const pyContent = `import ${v.lib} as ${v.alias}\n\nprint('${v.desc}')\n`;
+    const pyFileId = "team3-t24-py";
+    const noteFileId = "team3-t24-import-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "main.py": { id: "f-py", name: "main.py", path: `${cwd}/main.py`, content: `import ${v.lib} as ${v.alias}\n\nprint('${v.desc}')\n` }
+      [pyFileId]: { id: pyFileId, name: "main.py", path: `${cwd}/main.py`, content: pyContent }
     };
-    envState.fileSystem.order = ["main.py"];
+    envState.fileSystem.order = [pyFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "imported_module.txt",
+      content: "",
+      path: `${cwd}/imported_module.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "imported_module.txt", targetText: v.lib } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.lib),
+        targetCommand: "cat main.py",
+        targetCommandOutput: catCommandOutput(pyContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -927,18 +1275,36 @@ export const terminalFindSpecificExtensionTask: TaskSpec = {
       { pdf: "invoice_q2.pdf", others: ["notes.txt", "backup.tar.gz"] },
     ];
     const v = pdfVariants[seed % pdfVariants.length];
-    const allFiles = [...v.others, v.pdf];
+    const allNames = [...v.others, v.pdf];
     const cwd = "/home/user/downloads";
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t25-pdf-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
-    envState.fileSystem.files = Object.fromEntries(
-      allFiles.map((name, i) => [name, { id: `f${i}`, name, path: `${cwd}/${name}`, content: "" }])
-    );
-    envState.fileSystem.order = allFiles;
+    const scenarioFiles: FileEntry[] = allNames.map((name, i) => ({
+      id: `team3-t25-s${i}`,
+      name,
+      path: `${cwd}/${name}`,
+      content: ""
+    }));
+    envState.fileSystem.files = Object.fromEntries(scenarioFiles.map((f) => [f.id, f]));
+    envState.fileSystem.order = scenarioFiles.map((f) => f.id);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "target_file.txt",
+      content: "",
+      path: `${cwd}/target_file.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "target_file.txt", targetText: v.pdf } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.pdf),
+        targetCommand: "ls",
+        targetCommandOutput: lsOutputFromEnv(envState)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -967,7 +1333,14 @@ export const mailExtractCancellationFeeTask: TaskSpec = {
       { original: "$500.00", fee: "$50.00", refund: "$450.00" },
     ];
     const v = feeVariants[seed % feeVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t26-fee-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "fee_amount.txt",
+      content: "",
+      path: `/home/user/fee_amount.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -979,7 +1352,10 @@ export const mailExtractCancellationFeeTask: TaskSpec = {
       body: [`> I want a refund for my ${v.original} ticket.`, "", "Hello,", `We can process the ${v.original} refund.`, `However, a cancellation fee of ${v.fee} applies.`, `Total refunded: ${v.refund}.`]
     }];
 
-    return { envState, targets: { targetNoteName: "fee_amount.txt", targetText: v.fee } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.fee), targetMessageId: `msg-refund-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -999,7 +1375,14 @@ export const mailExtractHrPhoneTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const phoneVariants = ["555-0199", "555-0312", "555-0487"];
     const phone = phoneVariants[seed % phoneVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t27-hr-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "hr_phone.txt",
+      content: "",
+      path: `/home/user/hr_phone.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 2 }];
     envState.appStates.mailLite["mail1"].messages = [
@@ -1007,7 +1390,10 @@ export const mailExtractHrPhoneTask: TaskSpec = {
       { id: `msg-hr-${seed}`, folderId: "inbox", sender: "hr@osmock.local", subject: "Onboarding Info", preview: "Welcome to the team.", body: ["Welcome!", `If you have questions, call HR at ${phone}.`, "Best."] }
     ];
 
-    return { envState, targets: { targetNoteName: "hr_phone.txt", targetText: phone } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, phone), targetMessageId: `msg-hr-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -1028,7 +1414,14 @@ export const mailExtractDraftRecipientTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const recipients = ["investors@osmock.com", "board@osmock.com", "cfo@osmock.com"];
     const recipient = recipients[seed % recipients.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t28-draft-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "draft_target.txt",
+      content: "",
+      path: `/home/user/draft_target.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [
       { id: "inbox", name: "Inbox", unread: 0 },
@@ -1043,7 +1436,10 @@ export const mailExtractDraftRecipientTask: TaskSpec = {
       body: [`To: ${recipient}`, "Subject: Q3 Report", "", "Please find the attached report."]
     }];
 
-    return { envState, targets: { targetNoteName: "draft_target.txt", targetText: recipient } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, recipient), targetMessageId: `msg-draft-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -1067,7 +1463,14 @@ export const mailExtractPromoCodeTask: TaskSpec = {
       { code: "VIP20", discount: "20%" },
     ];
     const v = promoVariants[seed % promoVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t29-promo-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "promo_code.txt",
+      content: "",
+      path: `/home/user/promo_code.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -1079,7 +1482,10 @@ export const mailExtractPromoCodeTask: TaskSpec = {
       body: ["Over 10,000 items on sale!", `Save ${v.discount} on everything.`, `Use code: ${v.code} at checkout.`, "Valid until 2026-08-31."]
     }];
 
-    return { envState, targets: { targetNoteName: "promo_code.txt", targetText: v.code } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.code), targetMessageId: `msg-promo-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -1099,7 +1505,14 @@ export const mailExtractDeadlineTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const deadlines = ["October 31st", "November 15th", "December 1st"];
     const deadline = deadlines[seed % deadlines.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t30-deadline-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "deadline.txt",
+      content: "",
+      path: `/home/user/deadline.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -1111,7 +1524,10 @@ export const mailExtractDeadlineTask: TaskSpec = {
       body: ["Hello,", "You have pending mandatory training modules.", `Deadline: ${deadline}.`, "Thank you."]
     }];
 
-    return { envState, targets: { targetNoteName: "deadline.txt", targetText: deadline } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, deadline), targetMessageId: `msg-action-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -1137,21 +1553,37 @@ export const terminalCatCsvSpecificValueTask: TaskSpec = {
     const aliceIds = ["EMP-042", "EMP-117", "EMP-233"];
     const aliceId = aliceIds[seed % aliceIds.length];
     const cwd = "/home/user/hr";
-    const envState = createBaseEnv(viewport);
+    const csvContent = `name,department,id\nBob,Sales,EMP-041\nAlice,Engineering,${aliceId}\nCharlie,HR,EMP-043`;
+    const csvFileId = "team3-t31-csv";
+    const noteFileId = "team3-t31-alice-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "employees.csv": {
-        id: "f-csv2",
+      [csvFileId]: {
+        id: csvFileId,
         name: "employees.csv",
         path: `${cwd}/employees.csv`,
-        content: `name,department,id\nBob,Sales,EMP-041\nAlice,Engineering,${aliceId}\nCharlie,HR,EMP-043`
+        content: csvContent
       }
     };
-    envState.fileSystem.order = ["employees.csv"];
+    envState.fileSystem.order = [csvFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "alice_id.txt",
+      content: "",
+      path: `${cwd}/alice_id.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "alice_id.txt", targetText: aliceId } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, aliceId),
+        targetCommand: "cat employees.csv",
+        targetCommandOutput: catCommandOutput(csvContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1176,16 +1608,31 @@ export const terminalCatGitignoreTask: TaskSpec = {
     ];
     const v = gitignoreVariants[seed % gitignoreVariants.length];
     const cwd = "/home/user/project";
-    const envState = createBaseEnv(viewport);
+    const gitFileId = "team3-t32-gitignore";
+    const noteFileId = "team3-t32-ignored-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      ".gitignore": { id: "f-git2", name: ".gitignore", path: `${cwd}/.gitignore`, content: v.content }
+      [gitFileId]: { id: gitFileId, name: ".gitignore", path: `${cwd}/.gitignore`, content: v.content }
     };
-    envState.fileSystem.order = [".gitignore"];
+    envState.fileSystem.order = [gitFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "ignored_dir.txt",
+      content: "",
+      path: `${cwd}/ignored_dir.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "ignored_dir.txt", targetText: v.target } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.target),
+        targetCommand: "cat .gitignore",
+        targetCommandOutput: catCommandOutput(v.content)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1209,18 +1656,36 @@ export const terminalFindBackupFileTask: TaskSpec = {
       { backup: "backup_db_20260101.sql", others: ["README.md", "schema.sql"] },
     ];
     const v = backupVariants[seed % backupVariants.length];
-    const allFiles = [...v.others, v.backup];
+    const allNames = [...v.others, v.backup];
     const cwd = "/var/backups";
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t33-backup-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
-    envState.fileSystem.files = Object.fromEntries(
-      allFiles.map((name, i) => [name, { id: `f${i}`, name, path: `${cwd}/${name}`, content: "" }])
-    );
-    envState.fileSystem.order = allFiles;
+    const scenarioFiles: FileEntry[] = allNames.map((name, i) => ({
+      id: `team3-t33-s${i}`,
+      name,
+      path: `${cwd}/${name}`,
+      content: ""
+    }));
+    envState.fileSystem.files = Object.fromEntries(scenarioFiles.map((f) => [f.id, f]));
+    envState.fileSystem.order = scenarioFiles.map((f) => f.id);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "latest_backup.txt",
+      content: "",
+      path: `${cwd}/latest_backup.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "latest_backup.txt", targetText: v.backup } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.backup),
+        targetCommand: "ls",
+        targetCommandOutput: lsOutputFromEnv(envState)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1243,21 +1708,37 @@ export const terminalCatPackageJsonVersionTask: TaskSpec = {
     const reactVer = reactVersions[seed % reactVersions.length];
     const axiosVer = axiosVersions[seed % axiosVersions.length];
     const cwd = "/home/user/frontend";
-    const envState = createBaseEnv(viewport);
+    const pkgContent = `{\n  "name": "app",\n  "dependencies": {\n    "react": "${reactVer}",\n    "axios": "${axiosVer}"\n  }\n}`;
+    const pkgFileId = "team3-t34-pkg";
+    const noteFileId = "team3-t34-react-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "package.json": {
-        id: "f-pkg",
+      [pkgFileId]: {
+        id: pkgFileId,
         name: "package.json",
         path: `${cwd}/package.json`,
-        content: `{\n  "name": "app",\n  "dependencies": {\n    "react": "${reactVer}",\n    "axios": "${axiosVer}"\n  }\n}`
+        content: pkgContent
       }
     };
-    envState.fileSystem.order = ["package.json"];
+    envState.fileSystem.order = [pkgFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "react_version.txt",
+      content: "",
+      path: `${cwd}/react_version.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "react_version.txt", targetText: reactVer } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, reactVer),
+        targetCommand: "cat package.json",
+        targetCommandOutput: catCommandOutput(pkgContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1281,18 +1762,36 @@ export const terminalFindShellScriptTask: TaskSpec = {
       { script: "setup_env.sh", others: ["requirements.txt", "Makefile"] },
     ];
     const v = scriptVariants[seed % scriptVariants.length];
-    const allFiles = [...v.others, v.script];
+    const allNames = [...v.others, v.script];
     const cwd = "/home/user/scripts";
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t35-script-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
-    envState.fileSystem.files = Object.fromEntries(
-      allFiles.map((name, i) => [name, { id: `f${i}`, name, path: `${cwd}/${name}`, content: "" }])
-    );
-    envState.fileSystem.order = allFiles;
+    const scenarioFiles: FileEntry[] = allNames.map((name, i) => ({
+      id: `team3-t35-s${i}`,
+      name,
+      path: `${cwd}/${name}`,
+      content: ""
+    }));
+    envState.fileSystem.files = Object.fromEntries(scenarioFiles.map((f) => [f.id, f]));
+    envState.fileSystem.order = scenarioFiles.map((f) => f.id);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "script_name.txt",
+      content: "",
+      path: `${cwd}/script_name.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "script_name.txt", targetText: v.script } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.script),
+        targetCommand: "ls",
+        targetCommandOutput: lsOutputFromEnv(envState)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1318,21 +1817,37 @@ export const terminalCatProcessListTask: TaskSpec = {
     const nginxPids = ["4021", "7731", "9105"];
     const pid = nginxPids[seed % nginxPids.length];
     const cwd = "/var/run";
-    const envState = createBaseEnv(viewport);
+    const procContent = `USER       PID %CPU %MEM    COMMAND\nroot         1  0.0  0.1    /sbin/init\nwww-data  ${pid}  0.0  0.5    nginx: worker process\nredis     5192  0.2  1.2    redis-server`;
+    const procFileId = "team3-t36-proc";
+    const noteFileId = "team3-t36-pid-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "processes.txt": {
-        id: "f-proc",
+      [procFileId]: {
+        id: procFileId,
         name: "processes.txt",
         path: `${cwd}/processes.txt`,
-        content: `USER       PID %CPU %MEM    COMMAND\nroot         1  0.0  0.1    /sbin/init\nwww-data  ${pid}  0.0  0.5    nginx: worker process\nredis     5192  0.2  1.2    redis-server`
+        content: procContent
       }
     };
-    envState.fileSystem.order = ["processes.txt"];
+    envState.fileSystem.order = [procFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "nginx_pid.txt",
+      content: "",
+      path: `${cwd}/nginx_pid.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "nginx_pid.txt", targetText: pid } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, pid),
+        targetCommand: "cat processes.txt",
+        targetCommandOutput: catCommandOutput(procContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1356,7 +1871,14 @@ export const mailExtractRebookedFlightTask: TaskSpec = {
       { original: "LH789", rebooked: "TG102" },
     ];
     const v = flightVariants[seed % flightVariants.length];
-    const envState = createBaseEnv(viewport);
+    const noteFileId = "team3-t37-flight-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "new_flight.txt",
+      content: "",
+      path: `/home/user/new_flight.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -1368,7 +1890,10 @@ export const mailExtractRebookedFlightTask: TaskSpec = {
       body: ["Dear Passenger,", `We regret to inform you that your original flight ${v.original} has been canceled.`, `You have been automatically rebooked on flight ${v.rebooked}.`, "We apologize for the inconvenience."]
     }];
 
-    return { envState, targets: { targetNoteName: "new_flight.txt", targetText: v.rebooked } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, v.rebooked), targetMessageId: `msg-cancel-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -1393,21 +1918,37 @@ export const terminalCatYamlConfigTask: TaskSpec = {
     ];
     const v = userVariants[seed % userVariants.length];
     const cwd = "/home/user/app/config";
-    const envState = createBaseEnv(viewport);
+    const ymlContent = `development:\n  user: ${v.dev}\n  pass: dev123\n\nproduction:\n  user: ${v.prod}\n  pass: super_secure_pwd!`;
+    const ymlFileId = "team3-t38-yml";
+    const noteFileId = "team3-t38-dbuser-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "database.yml": {
-        id: "f-yaml",
+      [ymlFileId]: {
+        id: ymlFileId,
         name: "database.yml",
         path: `${cwd}/database.yml`,
-        content: `development:\n  user: ${v.dev}\n  pass: dev123\n\nproduction:\n  user: ${v.prod}\n  pass: super_secure_pwd!`
+        content: ymlContent
       }
     };
-    envState.fileSystem.order = ["database.yml"];
+    envState.fileSystem.order = [ymlFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "prod_db_user.txt",
+      content: "",
+      path: `${cwd}/prod_db_user.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "prod_db_user.txt", targetText: v.prod } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.prod),
+        targetCommand: "cat database.yml",
+        targetCommandOutput: catCommandOutput(ymlContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
@@ -1427,7 +1968,15 @@ export const mailExtractUnsubscribeLinkTask: TaskSpec = {
   setup: (seed: number, viewport: Viewport) => {
     const unsubIds = ["999", "1024", "777"];
     const unsubId = unsubIds[seed % unsubIds.length];
-    const envState = createBaseEnv(viewport);
+    const expected = `https://osmock.com/unsub/${unsubId}`;
+    const noteFileId = "team3-t39-unsub-note";
+    let envState = createBaseEnv(viewport);
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "unsubscribe.txt",
+      content: "",
+      path: `/home/user/unsubscribe.txt`
+    });
 
     envState.appStates.mailLite["mail1"].folders = [{ id: "inbox", name: "Inbox", unread: 1 }];
     envState.appStates.mailLite["mail1"].messages = [{
@@ -1439,11 +1988,14 @@ export const mailExtractUnsubscribeLinkTask: TaskSpec = {
       body: [
         "Welcome to the Weekly Tech Digest!", "1. New AI model released.", "2. Quantum computing breakthrough.",
         "3. Cybersecurity updates.", "(...many more lines of news...)",
-        "Thank you for reading.", `To stop receiving these emails, unsubscribe here: https://osmock.com/unsub/${unsubId}`
+        "Thank you for reading.", `To stop receiving these emails, unsubscribe here: ${expected}`
       ]
     }];
 
-    return { envState, targets: { targetNoteName: "unsubscribe.txt", targetText: `https://osmock.com/unsub/${unsubId}` } };
+    return {
+      envState,
+      targets: { ...team3NoteTargets(noteFileId, expected), targetMessageId: `msg-digest-${seed}` }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["mail.message_opened", "note.target_appended"],
@@ -1468,21 +2020,37 @@ export const terminalCatCertExpiryTask: TaskSpec = {
     ];
     const v = certVariants[seed % certVariants.length];
     const cwd = "/etc/ssl/certs";
-    const envState = createBaseEnv(viewport);
+    const certContent = `Certificate Details:\nIssuer: Let's Encrypt Authority\nValid From: ${v.from}\nValid Until: ${v.until}\nStatus: Active`;
+    const certFileId = "team3-t40-cert";
+    const noteFileId = "team3-t40-expiry-note";
+    let envState = createBaseEnv(viewport);
 
     envState.fileSystem.cwd = cwd;
     envState.appStates.terminalLite["terminal1"].cwd = cwd;
     envState.fileSystem.files = {
-      "cert_info.txt": {
-        id: "f-cert",
+      [certFileId]: {
+        id: certFileId,
         name: "cert_info.txt",
         path: `${cwd}/cert_info.txt`,
-        content: `Certificate Details:\nIssuer: Let's Encrypt Authority\nValid From: ${v.from}\nValid Until: ${v.until}\nStatus: Active`
+        content: certContent
       }
     };
-    envState.fileSystem.order = ["cert_info.txt"];
+    envState.fileSystem.order = [certFileId];
+    envState = addTeam3File(envState, {
+      id: noteFileId,
+      name: "cert_expiry.txt",
+      content: "",
+      path: `${cwd}/cert_expiry.txt`
+    });
 
-    return { envState, targets: { targetNoteName: "cert_expiry.txt", targetText: v.until } };
+    return {
+      envState,
+      targets: {
+        ...team3NoteTargets(noteFileId, v.until),
+        targetCommand: "cat cert_info.txt",
+        targetCommandOutput: catCommandOutput(certContent)
+      }
+    };
   },
   goalPredicates: ["note.saved"],
   progressPredicates: ["terminal.command_ran", "note.target_appended"],
