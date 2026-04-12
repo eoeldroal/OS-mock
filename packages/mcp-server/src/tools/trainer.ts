@@ -36,7 +36,7 @@ export function registerTrainerTools(server: McpServer, host: HostApp) {
   server.registerTool(
     "trainer.list_tasks",
     {
-      description: "List tasks available in the OS mock environment.",
+      description: "List public task catalog entries. Returns only agent-safe fields and never internal authoring metadata.",
       inputSchema: {
         split: z.enum(["all", "starter", "representative", "train", "eval"]).optional()
       }

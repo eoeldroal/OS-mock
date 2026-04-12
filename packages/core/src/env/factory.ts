@@ -10,6 +10,7 @@ import type {
   Viewport,
   WindowInstance
 } from "../types.js";
+import { BROWSER_BOOKMARKS, BROWSER_HELP_TOPICS, BROWSER_TASK_CATEGORIES } from "../browser-fixtures.js";
 import { nextZIndex } from "../system/window-manager.js";
 
 export const GNOME_TOP_BAR_HEIGHT = 32;
@@ -187,96 +188,14 @@ export function addBrowserWindow(
       { id: `${windowId}-tab-1`, title: "OSWorld Explorer", active: true },
       { id: `${windowId}-tab-2`, title: "Ubuntu help", active: false }
     ],
-    bookmarks: ["Downloads", "OSWorld", "Ubuntu Docs", "Research Board"],
-    categories: [
-      {
-        id: "workflow",
-        label: "Workflow",
-        tasks: [
-          {
-            id: "workflow_mail_bridge",
-            domain: "Workflow",
-            title: "Bridge a Thunderbird summary into notes",
-            instruction: "Review a Thunderbird summary and record the task id in a local note.",
-            actions: ["Open Firefox", "Select Workflow", "Inspect task card", "Log task id into a note"]
-          },
-          {
-            id: "workflow_terminal_capture",
-            domain: "Workflow",
-            title: "Capture terminal output in notes",
-            instruction: "Run a short terminal command and store its output in a text note.",
-            actions: ["Open Terminal", "Run pwd", "Open note", "Save output"]
-          }
-        ]
-      },
-      {
-        id: "os",
-        label: "OS",
-        tasks: [
-          {
-            id: "os_restore_window",
-            domain: "OS",
-            title: "Restore a minimized editor",
-            instruction: "Bring a minimized editor window back from the dock and save the pending work.",
-            actions: ["Inspect dock", "Restore window", "Save file"]
-          },
-          {
-            id: "os_popup_dismissal",
-            domain: "OS",
-            title: "Dismiss a blocking popup",
-            instruction: "Clear a modal popup before interacting with the desktop again.",
-            actions: ["Find popup", "Dismiss dialog", "Resume task"]
-          }
-        ]
-      },
-      {
-        id: "chrome",
-        label: "Chrome",
-        tasks: [
-          {
-            id: "chrome_explorer_review",
-            domain: "Chrome",
-            title: "Review the OSWorld Explorer board",
-            instruction: "Open the explorer board and inspect a browser-oriented task card.",
-            actions: ["Open browser", "Navigate board", "Inspect visible task details"]
-          },
-          {
-            id: "chrome_help_capture",
-            domain: "Chrome",
-            title: "Capture the Ubuntu help reminder",
-            instruction: "Switch to the Ubuntu help tab and record the dock reminder line in a note.",
-            actions: ["Switch tab", "Read reminder line", "Save line into a note"]
-          }
-        ]
-      },
-      {
-        id: "thunderbird",
-        label: "Thunderbird",
-        tasks: [
-          {
-            id: "thunderbird_mock_notes",
-            domain: "Thunderbird",
-            title: "Capture the mock environment reminder",
-            instruction: "Open the Mock environment notes message and copy its reminder into a note.",
-            actions: ["Open Thunderbird", "Select message", "Copy reminder text", "Save note"]
-          },
-          {
-            id: "thunderbird_task_pack",
-            domain: "Thunderbird",
-            title: "Review the Ubuntu desktop task pack",
-            instruction: "Open the Ubuntu desktop task pack message and review its workflow coverage.",
-            actions: ["Open inbox", "Select task pack message", "Read preview"]
-          }
-        ]
-      }
-    ],
+    bookmarks: structuredClone(BROWSER_BOOKMARKS),
+    categories: structuredClone(BROWSER_TASK_CATEGORIES),
     selectedCategoryId: "workflow",
     selectedTaskId: "workflow_mail_bridge",
-    helpLines: [
-      "Ubuntu help",
-      "Use the dock to switch between Files, Text Editor, Terminal, Firefox, and Thunderbird.",
-      "Representative OSWorld-style tasks often span browser, mail, terminal, and file workflows."
-    ]
+    helpTopics: structuredClone(BROWSER_HELP_TOPICS),
+    selectedHelpTopicId: BROWSER_HELP_TOPICS[0]?.id ?? "",
+    helpLines: [...(BROWSER_HELP_TOPICS[0]?.lines ?? [])],
+    lastOpenedBookmarkId: undefined
   };
   next.appStates.browserLite[windowId] = browserState;
   return next;

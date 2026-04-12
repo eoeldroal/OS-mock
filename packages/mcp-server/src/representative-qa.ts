@@ -70,7 +70,7 @@ async function observe(client: Client, sessionId: string) {
 async function scenarioBrowserWorkflow(client: Client, page: import("playwright").Page, sessionId: string) {
   const reset = await callTool<StepResult>(client, "trainer.reset", {
     sessionId,
-    taskId: "browser_log_workflow_task_id",
+    taskId: "browser_log_task_preopen_note_hard",
     seed: 0
   });
 
@@ -79,22 +79,20 @@ async function scenarioBrowserWorkflow(client: Client, page: import("playwright"
   const artifacts: string[] = [];
   artifacts.push(await screenshot(page, "browser-workflow-reset"));
 
-  await page.getByText("Workflow", { exact: true }).click();
+  await page.getByText("Chrome", { exact: true }).click();
   await waitForUi(page, 300);
-  await page.getByText("Bridge a Thunderbird summary into notes", { exact: true }).click();
+  await page.getByText("Capture the Ubuntu help reminder", { exact: true }).click();
   await waitForUi(page, 300);
   artifacts.push(await screenshot(page, "browser-workflow-selected"));
 
-  await page.getByText("browser-log.txt", { exact: true }).first().dblclick();
-  await waitForUi(page, 360);
   let observed = await observe(client, sessionId);
   const textBox = findNode(
     observed.observation.a11yTree,
     (node) => node.role === "textbox" && node.name === "browser-log.txt"
   );
-  await page.mouse.click(textBox.bounds.x + 10, textBox.bounds.y + 10);
+  await page.mouse.click(textBox.bounds.x + 12, textBox.bounds.y + textBox.bounds.height - 10);
   await waitForUi(page, 250);
-  await page.keyboard.type("workflow_mail_bridge", { delay: 30 });
+  await page.keyboard.type("chrome_help_capture", { delay: 30 });
   await waitForUi(page, 300);
   artifacts.push(await screenshot(page, "browser-workflow-typed"));
 
@@ -108,7 +106,7 @@ async function scenarioBrowserWorkflow(client: Client, page: import("playwright"
   });
 
   return {
-    name: "browser-workflow-task-id",
+    name: "browser-preopen-log",
     passed: final.terminated && !final.truncated && final.cumulativeReward > 0,
     details: {
       finalReward: final.cumulativeReward,
@@ -121,7 +119,7 @@ async function scenarioBrowserWorkflow(client: Client, page: import("playwright"
 async function scenarioBrowserHelp(client: Client, page: import("playwright").Page, sessionId: string) {
   const reset = await callTool<StepResult>(client, "trainer.reset", {
     sessionId,
-    taskId: "browser_capture_help_line",
+    taskId: "browser_help_preopen_note_distractors",
     seed: 0
   });
 
@@ -134,14 +132,12 @@ async function scenarioBrowserHelp(client: Client, page: import("playwright").Pa
   await waitForUi(page, 300);
   artifacts.push(await screenshot(page, "browser-help-tab"));
 
-  await page.getByText("ubuntu-help.txt", { exact: true }).first().dblclick();
-  await waitForUi(page, 360);
   const observed = await observe(client, sessionId);
   const textBox = findNode(
     observed.observation.a11yTree,
-    (node) => node.role === "textbox" && node.name === "ubuntu-help.txt"
+    (node) => node.role === "textbox" && node.name === "help-notes.txt"
   );
-  await page.mouse.click(textBox.bounds.x + 10, textBox.bounds.y + 10);
+  await page.mouse.click(textBox.bounds.x + 12, textBox.bounds.y + textBox.bounds.height - 10);
   await waitForUi(page, 250);
   await page.keyboard.type(
     "Use the dock to switch between Files, Text Editor, Terminal, Firefox, and Thunderbird.",
@@ -160,7 +156,7 @@ async function scenarioBrowserHelp(client: Client, page: import("playwright").Pa
   });
 
   return {
-    name: "browser-help-line-capture",
+    name: "browser-help-preopen-distractors",
     passed: final.terminated && !final.truncated && final.cumulativeReward > 0,
     details: {
       finalReward: final.cumulativeReward,
@@ -283,76 +279,51 @@ async function scenarioTerminal(client: Client, page: import("playwright").Page,
 }
 
 async function main() {
-  if (!existsSync(serverEntry)) {
-    throw new Error(`Built MCP server not found at ${serverEntry}. Run npm run build first.`);
-  }
-
   await mkdir(artifactDir, { recursive: true });
+  if (!existsSync(serverEntry)) {
+    throw new Error(`MCP server build not found: ${serverEntry}`);
+  }
 
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [serverEntry],
-    cwd: rootDir,
-    env: {
-      ...process.env,
-      PATH: process.env.PATH ?? ""
-    },
-    stderr: "pipe"
+    args: [serverEntry]
   });
 
-  transport.stderr?.on("data", (chunk) => {
-    process.stderr.write(`[mcp-server] ${chunk}`);
-  });
+  const client = new Client({ name: "representative-qa", version: "0.1.0" }, { capabilities: {} });
+  await client.connect(transport);
 
-  const client = new Client(
-    {
-      name: "os-mock-representative-qa",
-      version: "0.1.0"
-    },
-    {
-      capabilities: {}
-    }
-  );
+  const createSession = await callTool<{ sessionId: string }>(client, "trainer.create_session", {});
+  const sessionId = createSession.sessionId;
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
   const results: QaScenarioResult[] = [];
-
   try {
-    await client.connect(transport);
-    const created = await callTool<{ sessionId: string; viewerUrl: string }>(client, "trainer.create_session", {});
-    const sessionId = created.sessionId;
-
     results.push(await scenarioBrowserWorkflow(client, page, sessionId));
     results.push(await scenarioBrowserHelp(client, page, sessionId));
     results.push(await scenarioMail(client, page, sessionId));
     results.push(await scenarioTerminal(client, page, sessionId));
-
-    const taskList = await callTool(client, "trainer.list_tasks", { split: "representative" });
-    const report = {
-      generatedAt: new Date().toISOString(),
-      sessionId,
-      viewerUrl: created.viewerUrl,
-      representativeTaskCount: Array.isArray(taskList) ? taskList.length : undefined,
-      passed: results.every((result) => result.passed),
-      results
-    };
-
-    const reportPath = resolve(artifactDir, "report.json");
-    await writeFile(reportPath, JSON.stringify(report, null, 2));
-    console.log(JSON.stringify(report, null, 2));
-
-    await callTool(client, "trainer.close_session", { sessionId });
   } finally {
+    await page.close();
     await browser.close();
-    await client.close();
+    await callTool(client, "trainer.close_session", { sessionId });
     await transport.close();
+  }
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    passed: results.every((result) => result.passed),
+    results
+  };
+  await writeFile(resolve(artifactDir, "report.json"), JSON.stringify(report, null, 2), "utf8");
+
+  if (!report.passed) {
+    process.exitCode = 1;
   }
 }
 
-main().catch((error) => {
+void main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

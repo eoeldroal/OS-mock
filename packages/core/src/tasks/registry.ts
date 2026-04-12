@@ -1,6 +1,6 @@
 import type { TaskSpec } from "../types.js";
-import { REPRESENTATIVE_TASKS } from "./representative-tasks.js";
-import { STARTER_TASKS } from "./starter-tasks.js";
+import { REPRESENTATIVE_TASKS } from "./representative/index.js";
+import { STARTER_TASKS } from "./starter/index.js";
 import { FILES_WINDOW_TASKS } from "./files-window-tasks.js";
 
 export type TaskSplit = "all" | "starter" | "representative" | "train" | "eval";
@@ -22,7 +22,7 @@ function resolveTasks(split: TaskSplit = "all") {
   return ALL_TASKS;
 }
 
-function toSummary(task: TaskSpec) {
+function toPublicSummary(task: TaskSpec) {
   return {
     id: task.id,
     instruction: task.instruction,
@@ -33,8 +33,26 @@ function toSummary(task: TaskSpec) {
   };
 }
 
+function toAuthoringSummary(task: TaskSpec) {
+  return {
+    ...toPublicSummary(task),
+    family: task.summary.family,
+    level: task.summary.level,
+    apps: task.summary.apps,
+    startState: task.summary.startState,
+    objective: task.summary.objective,
+    implementationPath: task.summary.implementationPath,
+    goalPredicates: task.goalPredicates,
+    progressPredicates: task.progressPredicates
+  };
+}
+
 export function listTasks(split: TaskSplit = "all") {
-  return resolveTasks(split).map(toSummary);
+  return resolveTasks(split).map(toPublicSummary);
+}
+
+export function listTaskAuthoringMetadata(split: TaskSplit = "all") {
+  return resolveTasks(split).map(toAuthoringSummary);
 }
 
 export function listStarterTasks() {
@@ -51,5 +69,9 @@ export function getTaskSpec(taskId: string): TaskSpec {
 
 export function sampleTask(seed = Date.now(), split: TaskSplit = "all"): TaskSpec {
   const tasks = resolveTasks(split);
-  return tasks[Math.abs(seed) % tasks.length];
+  return tasks[abs(seed) % tasks.length];
+}
+
+function abs(value: number) {
+  return Math.abs(value);
 }

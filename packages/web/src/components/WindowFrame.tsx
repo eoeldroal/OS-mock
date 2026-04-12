@@ -354,8 +354,8 @@ function BrowserLiteView({ model }: { model: BrowserLiteViewModel }) {
             <div style={{ fontSize: 12, fontWeight: 800, color: "#6b7280", textTransform: "uppercase" }}>Bookmarks</div>
             <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
               {model.bookmarks.map((bookmark) => (
-                <div key={bookmark} style={{ fontSize: 14, color: "#374151", fontWeight: 500 }}>
-                  {bookmark}
+                <div key={bookmark.id} style={{ fontSize: 14, color: "#374151", fontWeight: 500 }}>
+                  {bookmark.label}
                 </div>
               ))}
             </div>

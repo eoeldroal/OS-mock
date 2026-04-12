@@ -247,6 +247,15 @@ function handleNoteEditorClick(state: EnvState, window: WindowInstance, note: No
   return { envState: next, accepted: true };
 }
 
+function setHelpTopic(browser: BrowserLiteState, topicId: string) {
+  const topic = browser.helpTopics.find((item) => item.id === topicId) ?? browser.helpTopics[0];
+  if (!topic) {
+    return;
+  }
+  browser.selectedHelpTopicId = topic.id;
+  browser.helpLines = [...topic.lines];
+}
+
 function setBrowserPage(browser: BrowserLiteState, page: "explorer" | "help") {
   browser.currentPage = page;
   browser.tabs = browser.tabs.map((tab, index) => ({
@@ -260,10 +269,38 @@ function setBrowserPage(browser: BrowserLiteState, page: "explorer" | "help") {
       browser.selectedCategoryId = browser.categories[0].id;
       browser.selectedTaskId = browser.categories[0].tasks[0]?.id ?? "";
     }
-  } else {
-    browser.pageTitle = "Ubuntu help";
-    browser.url = "https://help.ubuntu.com/mock/osworld";
+    return;
   }
+
+  browser.pageTitle = "Ubuntu help";
+  browser.url = "https://help.ubuntu.com/mock/osworld";
+  if (!browser.selectedHelpTopicId && browser.helpTopics[0]) {
+    setHelpTopic(browser, browser.helpTopics[0].id);
+  }
+}
+
+function openBrowserBookmark(browser: BrowserLiteState, bookmarkIndex: number) {
+  const bookmark = browser.bookmarks[bookmarkIndex];
+  if (!bookmark) {
+    return false;
+  }
+
+  browser.lastOpenedBookmarkId = bookmark.id;
+  setBrowserPage(browser, bookmark.page);
+
+  if (bookmark.page === "explorer" && bookmark.targetCategoryId) {
+    const category = browser.categories.find((item) => item.id === bookmark.targetCategoryId) ?? browser.categories[0];
+    if (category) {
+      browser.selectedCategoryId = category.id;
+      browser.selectedTaskId = category.tasks[0]?.id ?? "";
+    }
+  }
+
+  if (bookmark.page === "help") {
+    setHelpTopic(browser, bookmark.targetHelpTopicId ?? browser.helpTopics[0]?.id ?? "");
+  }
+
+  return true;
 }
 
 function handleBrowserClick(state: EnvState, window: WindowInstance, browser: BrowserLiteState, point: Point) {
@@ -279,18 +316,19 @@ function handleBrowserClick(state: EnvState, window: WindowInstance, browser: Br
 
   const clickedBookmarkIndex = layout.bookmarkRects.findIndex((rect) => pointInRect(point, rect));
   if (clickedBookmarkIndex >= 0) {
-    const bookmark = nextBrowser.bookmarks[clickedBookmarkIndex];
-    if (bookmark === "OSWorld") {
-      setBrowserPage(nextBrowser, "explorer");
-      return { envState: next, accepted: true };
-    }
-    if (bookmark === "Ubuntu Docs") {
-      setBrowserPage(nextBrowser, "help");
-      return { envState: next, accepted: true };
-    }
+    return { envState: next, accepted: openBrowserBookmark(nextBrowser, clickedBookmarkIndex) };
   }
 
-  if (nextBrowser.currentPage !== "explorer") {
+  if (nextBrowser.currentPage === "help") {
+    const clickedHelpTopicIndex = layout.helpTopicRects.findIndex((rect) => pointInRect(point, rect));
+    if (clickedHelpTopicIndex >= 0) {
+      const topic = nextBrowser.helpTopics[clickedHelpTopicIndex];
+      if (!topic) {
+        return { envState: state, accepted: false };
+      }
+      setHelpTopic(nextBrowser, topic.id);
+      return { envState: next, accepted: true };
+    }
     return { envState: state, accepted: false };
   }
 

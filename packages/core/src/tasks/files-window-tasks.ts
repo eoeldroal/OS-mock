@@ -5,7 +5,8 @@
  * All tasks use only File Explorer, Note Editor, and Window/Shell primitives.
  */
 
-import type { PredicateId, Rect, TaskSpec, Viewport } from "../types.js";
+import type { PredicateId, Rect, TaskSpec, TaskSummary, Viewport } from "../types.js";
+import { withTaskSummaries } from "./with-task-summaries.js";
 import {
   addBrowserWindow,
   addExplorerWindow,
@@ -560,7 +561,9 @@ function setupDockLaunchOpenCopyPasteSave(seed: number, vp: Viewport) {
    Task Specs
    ═══════════════════════════════════════════════════════════ */
 
-export const FILES_WINDOW_TASKS: TaskSpec[] = [
+const implementationPath = "packages/core/src/tasks/files-window-tasks.ts";
+
+const RAW_FILES_WINDOW_TASKS = [
   // ── TIER A ──
   { id: "popup_dismiss", instruction: "Dismiss the blocking popup.", domain: "OS", split: "starter", maxSteps: 5, seedDefaults: [0, 1, 2], setup: setupPopupDismiss, goalPredicates: ["popup.dismissed"], progressPredicates: ["popup.dismissed"], forbiddenPredicates: [] },
   { id: "open_single_file", instruction: "Open the target file from the file explorer.", domain: "Files", split: "starter", maxSteps: 8, seedDefaults: [0, 1, 2], setup: (s, v) => setupOpenFile(s, v, 0), goalPredicates: ["note.target_opened"], progressPredicates: ["note.target_opened"], forbiddenPredicates: [] },
@@ -618,4 +621,66 @@ export const FILES_WINDOW_TASKS: TaskSpec[] = [
   { id: "popup_rename_open_append_save", instruction: "Dismiss popup, rename, open, append, and save.", domain: "Files", split: "representative", maxSteps: 38, seedDefaults: [0, 1, 2], setup: setupPopupRenameOpenAppendSave, goalPredicates: ["popup.dismissed", "file.renamed", "note.target_opened", "note.target_appended", "note.saved"], progressPredicates: ["popup.dismissed", "file.renamed", "note.target_opened", "note.target_appended", "note.saved"], forbiddenPredicates: [] },
   { id: "popup_all_minimized_restore_save", instruction: "Handle popup and all-minimized state, restore and save.", domain: "OS", split: "representative", maxSteps: 22, seedDefaults: [0, 1, 2], setup: setupPopupAllMinRestoreSave, goalPredicates: ["popup.dismissed", "window.note_restored", "note.saved"], progressPredicates: ["popup.dismissed", "window.note_restored", "note.saved"], forbiddenPredicates: [] },
   { id: "dock_launch_open_copy_paste_save", instruction: "Launch explorer, open two files, copy between them, and save.", domain: "Workflow", split: "representative", maxSteps: 40, seedDefaults: [0, 1, 2], setup: setupDockLaunchOpenCopyPasteSave, goalPredicates: ["clipboard.source_line_copied", "note.target_pasted", "note.saved"], progressPredicates: ["clipboard.source_line_copied", "note.target_pasted", "note.saved"], forbiddenPredicates: [] }
-];
+] satisfies Omit<TaskSpec, "summary">[];
+
+const summaries: Record<string, TaskSummary> = {
+  // ── TIER A ──
+  popup_dismiss: { family: "popup_dismiss", level: "A", apps: ["popup"], startState: "A blocking popup is centered over the desktop; File Explorer and companion apps are behind it.", objective: "Dismiss the modal popup to unblock the desktop.", implementationPath },
+  open_single_file: { family: "file_open", level: "A", apps: ["files"], startState: "File Explorer is focused with the target file visible among no distractors.", objective: "Open the target file from the file explorer.", implementationPath },
+  restore_minimized_note: { family: "window_restore", level: "A", apps: ["window", "note"], startState: "The note editor is minimized; File Explorer is focused.", objective: "Restore the minimized editor window to the desktop.", implementationPath },
+  refocus_background_note: { family: "window_focus", level: "A", apps: ["window", "note"], startState: "The note editor is open but behind the focused file manager.", objective: "Bring the background text editor to the foreground.", implementationPath },
+  save_dirty_note: { family: "note_save", level: "A", apps: ["note"], startState: "The note editor is focused with unsaved (dirty) changes in its buffer.", objective: "Save the pending changes in the editor.", implementationPath },
+  open_among_two: { family: "file_open", level: "A", apps: ["files"], startState: "File Explorer is focused showing two files including the target.", objective: "Open the correct file from a list of two.", implementationPath },
+  open_among_three: { family: "file_open", level: "A", apps: ["files"], startState: "File Explorer is focused showing three files including the target.", objective: "Open the correct file from a list of three.", implementationPath },
+  open_among_four: { family: "file_open", level: "A", apps: ["files"], startState: "File Explorer is focused showing four files including the target.", objective: "Open the correct file from a list of four.", implementationPath },
+  rename_preselected: { family: "file_rename", level: "A", apps: ["files"], startState: "File Explorer is focused with the target file already selected.", objective: "Rename the pre-selected file to the specified new name.", implementationPath },
+  rename_single: { family: "file_rename", level: "A", apps: ["files"], startState: "File Explorer is focused with a single target file visible.", objective: "Select and rename the file.", implementationPath },
+
+  // ── TIER B ──
+  rename_among_two: { family: "file_rename", level: "B", apps: ["files"], startState: "File Explorer is focused showing two files including the target.", objective: "Identify and rename the correct file from two.", implementationPath },
+  rename_among_three: { family: "file_rename", level: "B", apps: ["files"], startState: "File Explorer is focused showing three files including the target.", objective: "Identify and rename the correct file from three.", implementationPath },
+  rename_among_four: { family: "file_rename", level: "B", apps: ["files"], startState: "File Explorer is focused showing four files including the target.", objective: "Identify and rename the correct file from four.", implementationPath },
+  popup_then_open: { family: "popup_then_file", level: "B", apps: ["popup", "files"], startState: "A popup blocks the desktop; File Explorer has the target file behind it.", objective: "Dismiss the popup and then open the target file.", implementationPath },
+  popup_then_rename: { family: "popup_then_rename", level: "B", apps: ["popup", "files"], startState: "A popup blocks the desktop; File Explorer has the target file behind it.", objective: "Dismiss the popup and then rename the target file.", implementationPath },
+  restore_and_save: { family: "window_restore_save", level: "B", apps: ["window", "note"], startState: "The note editor is minimized with unsaved changes; Explorer is focused.", objective: "Restore the hidden editor and save its pending changes.", implementationPath },
+  restore_specific_of_two: { family: "window_restore", level: "B", apps: ["window", "note"], startState: "Two editor windows are minimized; Explorer is focused.", objective: "Restore the correct editor from two minimized windows.", implementationPath },
+  restore_from_all_minimized: { family: "window_restore", level: "B", apps: ["window", "note"], startState: "All windows including the editor are minimized.", objective: "Find and restore the editor from a fully minimized desktop.", implementationPath },
+  open_and_append: { family: "file_open_append", level: "B", apps: ["files", "note"], startState: "File Explorer is focused with the target file visible; no editor is open.", objective: "Open the file and append the requested text.", implementationPath },
+  popup_then_restore: { family: "popup_then_restore", level: "B", apps: ["popup", "window", "note"], startState: "A popup blocks the desktop and the editor is minimized behind it.", objective: "Dismiss the popup and restore the minimized editor.", implementationPath },
+  dock_launch_then_open: { family: "dock_launch_open", level: "B", apps: ["dock", "files"], startState: "File Explorer is not running; files exist in the virtual filesystem.", objective: "Launch File Explorer from the dock and open the target file.", implementationPath },
+  dock_launch_then_rename: { family: "dock_launch_rename", level: "B", apps: ["dock", "files"], startState: "File Explorer is not running; files exist in the virtual filesystem.", objective: "Launch File Explorer from the dock and rename the target file.", implementationPath },
+  restore_explorer_then_rename: { family: "window_restore_rename", level: "B", apps: ["window", "files"], startState: "File Explorer is minimized with the target file inside.", objective: "Restore the minimized explorer and rename the target file.", implementationPath },
+  switch_between_notes: { family: "window_focus", level: "B", apps: ["window", "note"], startState: "Two note editors are open side by side; the wrong one is focused.", objective: "Switch focus to the correct editor window.", implementationPath },
+  open_from_unfocused_explorer: { family: "window_focus_open", level: "B", apps: ["window", "files"], startState: "File Explorer is open but behind the focused editor window.", objective: "Switch to the file manager and open the target file.", implementationPath },
+
+  // ── TIER C ──
+  open_append_save: { family: "file_open_edit_save", level: "C", apps: ["files", "note"], startState: "File Explorer is focused with the target file visible; no editor open.", objective: "Open the file, append text, and save.", implementationPath },
+  open_append_save_among_three: { family: "file_open_edit_save", level: "C", apps: ["files", "note"], startState: "File Explorer is focused showing three files including the target.", objective: "Open the correct file from three, append text, and save.", implementationPath },
+  open_append_save_among_four: { family: "file_open_edit_save", level: "C", apps: ["files", "note"], startState: "File Explorer is focused showing four files including the target.", objective: "Open the correct file from four, append text, and save.", implementationPath },
+  rename_then_open: { family: "file_rename_open", level: "C", apps: ["files"], startState: "File Explorer is focused with the target file and one distractor.", objective: "Rename the file and then open it for editing.", implementationPath },
+  popup_then_open_append_save: { family: "popup_then_file_edit", level: "C", apps: ["popup", "files", "note"], startState: "A popup blocks the desktop; File Explorer is behind it with the target file.", objective: "Dismiss popup, open the file, append text, and save.", implementationPath },
+  popup_then_restore_save: { family: "popup_then_restore_save", level: "C", apps: ["popup", "window", "note"], startState: "A popup blocks the desktop; the editor is minimized with unsaved changes.", objective: "Dismiss popup, restore the editor, and save pending changes.", implementationPath },
+  restore_append_save: { family: "window_restore_edit_save", level: "C", apps: ["window", "note"], startState: "The note editor is minimized; Explorer is focused.", objective: "Restore the hidden editor, append text, and save.", implementationPath },
+  dock_launch_open_append_save: { family: "dock_launch_edit", level: "C", apps: ["dock", "files", "note"], startState: "File Explorer is not running; files exist in the virtual filesystem.", objective: "Launch explorer, open the file, append text, and save.", implementationPath },
+  all_minimized_restore_and_save: { family: "all_minimized_restore_save", level: "C", apps: ["window", "note"], startState: "All windows are minimized; the editor has unsaved changes.", objective: "Restore the editor from a fully minimized desktop and save.", implementationPath },
+  popup_then_dock_launch_open: { family: "popup_dock_launch_open", level: "C", apps: ["popup", "dock", "files"], startState: "A popup blocks the desktop and File Explorer is not running.", objective: "Dismiss popup, launch explorer from dock, and open the file.", implementationPath },
+  copy_line_paste_save: { family: "clipboard_copy_paste", level: "C", apps: ["note", "clipboard"], startState: "Two note editors are open side by side with source.txt focused.", objective: "Copy a line from source, paste into target, and save.", implementationPath },
+  rename_then_open_among_three: { family: "file_rename_open", level: "C", apps: ["files"], startState: "File Explorer is focused showing three files including the target.", objective: "Rename the correct file among three and open it.", implementationPath },
+  popup_then_rename_among_three: { family: "popup_then_rename", level: "C", apps: ["popup", "files"], startState: "A popup blocks the desktop; Explorer has three files behind it.", objective: "Dismiss popup and rename the correct file among three.", implementationPath },
+  dock_launch_rename_among_three: { family: "dock_launch_rename", level: "C", apps: ["dock", "files"], startState: "File Explorer is not running; three files exist in the filesystem.", objective: "Launch explorer from dock and rename the correct file among three.", implementationPath },
+  restore_among_three_then_save: { family: "window_restore_save", level: "C", apps: ["window", "note"], startState: "Three windows are minimized including the target editor with unsaved changes.", objective: "Restore the correct editor from three minimized and save.", implementationPath },
+
+  // ── TIER D ──
+  rename_open_append_save: { family: "file_rename_edit_save", level: "D", apps: ["files", "note"], startState: "File Explorer is focused with the target file and a distractor.", objective: "Rename the file, open it, append text, and save.", implementationPath },
+  popup_then_rename_open: { family: "popup_then_rename_open", level: "D", apps: ["popup", "files"], startState: "A popup blocks the desktop; Explorer has the target file behind it.", objective: "Dismiss popup, rename the file, and open it.", implementationPath },
+  popup_then_copy_paste_save: { family: "popup_then_clipboard", level: "D", apps: ["popup", "note", "clipboard"], startState: "A popup blocks the desktop; two editors are open behind it.", objective: "Dismiss popup, copy a line between editors, and save.", implementationPath },
+  popup_then_restore_append_save: { family: "popup_then_restore_edit", level: "D", apps: ["popup", "window", "note"], startState: "A popup blocks the desktop; the editor is minimized behind it.", objective: "Dismiss popup, restore the editor, append text, and save.", implementationPath },
+  dock_launch_rename_then_open: { family: "dock_launch_rename_open", level: "D", apps: ["dock", "files"], startState: "File Explorer is not running; files exist in the virtual filesystem.", objective: "Launch explorer, rename the file, and open the renamed file.", implementationPath },
+  all_minimized_restore_append_save: { family: "all_minimized_restore_edit", level: "D", apps: ["window", "note"], startState: "All windows are minimized; the editor has existing content.", objective: "Restore the editor from a fully minimized desktop, append text, and save.", implementationPath },
+  popup_dock_launch_open_append_save: { family: "popup_dock_launch_edit", level: "D", apps: ["popup", "dock", "files", "note"], startState: "A popup blocks the desktop and File Explorer is not running.", objective: "Dismiss popup, launch explorer, open the file, append text, and save.", implementationPath },
+  popup_rename_open_append_save: { family: "popup_rename_edit", level: "D", apps: ["popup", "files", "note"], startState: "A popup blocks the desktop; Explorer has the target file behind it.", objective: "Dismiss popup, rename the file, open it, append text, and save.", implementationPath },
+  popup_all_minimized_restore_save: { family: "popup_all_minimized_save", level: "D", apps: ["popup", "window", "note"], startState: "A popup blocks the desktop and all windows are minimized; the editor has unsaved changes.", objective: "Dismiss popup, restore the editor from all-minimized state, and save.", implementationPath },
+  dock_launch_open_copy_paste_save: { family: "dock_launch_clipboard", level: "D", apps: ["dock", "note", "clipboard"], startState: "File Explorer is not running; source.txt and target.txt exist in the filesystem.", objective: "Launch explorer, open both files, copy a line from source to target, and save.", implementationPath }
+};
+
+export const FILES_WINDOW_TASKS = withTaskSummaries(RAW_FILES_WINDOW_TASKS, summaries);

@@ -1,0 +1,730 @@
+import {
+  formatBrowserTaskApps,
+  getBrowserHelpTopic,
+  getBrowserTask,
+  listBrowserTasks
+} from "../../browser-fixtures.js";
+import {
+  addBrowserWindow,
+  addExplorerWindow,
+  addFiles,
+  addNoteEditorWindow,
+  createEmptyEnv,
+  createFile
+} from "../../env/factory.js";
+import type { BrowserLiteState, BrowserTaskCard, TaskSpec, Viewport } from "../../types.js";
+import { browserBounds, explorerBounds, noteBoundsRight } from "./shared.js";
+
+const implementationPath = "packages/core/src/tasks/representative/browser-extended-tasks.ts";
+
+function setBrowserExplorer(browser: BrowserLiteState, categoryId: string, taskId: string) {
+  browser.currentPage = "explorer";
+  browser.tabs = browser.tabs.map((tab, index) => ({ ...tab, active: index === 0 }));
+  browser.pageTitle = "OSWorld Explorer";
+  browser.url = "https://os-world.github.io/explorer.html";
+  browser.selectedCategoryId = categoryId;
+  browser.selectedTaskId = taskId;
+}
+
+function setBrowserHelp(browser: BrowserLiteState, topicId: string) {
+  const topic = getBrowserHelpTopic(topicId);
+  browser.currentPage = "help";
+  browser.tabs = browser.tabs.map((tab, index) => ({ ...tab, active: index === 1 }));
+  browser.pageTitle = "Ubuntu help";
+  browser.url = "https://help.ubuntu.com/mock/osworld";
+  browser.selectedHelpTopicId = topic.id;
+  browser.helpLines = [...topic.lines];
+}
+
+function createBrowserEnv(viewport: Viewport, instruction: string) {
+  return addBrowserWindow(createEmptyEnv(viewport, instruction), "browser-main", browserBounds(), true, false);
+}
+
+function addRepresentativeNote(envState: ReturnType<typeof createEmptyEnv>, fileId: string, fileName: string, initialContent = "", preopen = true) {
+  let next = addFiles(envState, [
+    createFile(fileId, fileName, initialContent),
+    createFile("file-draft", "draft.txt", "Draft reference"),
+    createFile("file-reference", "reference.txt", "Reference material")
+  ]);
+  next = addExplorerWindow(next, "explorer-main", explorerBounds(), false);
+  if (preopen) {
+    next = addNoteEditorWindow(next, "notes-target", fileId, noteBoundsRight(), false, initialContent, false);
+  }
+  return next;
+}
+
+function buildHelpTask(
+  viewport: Viewport,
+  instruction: string,
+  topicId: string,
+  fileId: string,
+  fileName: string,
+  appendText: string,
+  initialContent = "",
+  preopen = true
+) {
+  let envState = createBrowserEnv(viewport, instruction);
+  const browser = envState.appStates.browserLite["browser-main"];
+  setBrowserExplorer(browser, "workflow", "workflow_mail_bridge");
+  envState = addRepresentativeNote(envState, fileId, fileName, initialContent, preopen);
+  return {
+    envState,
+    targets: {
+      targetFileId: fileId,
+      targetHelpTopicId: topicId,
+      appendText,
+      expectedSavedContent: initialContent + appendText
+    }
+  };
+}
+
+function buildTaskTask(
+  viewport: Viewport,
+  instruction: string,
+  categoryId: string,
+  taskId: string,
+  fileId: string,
+  fileName: string,
+  appendText: string,
+  initialContent = "",
+  preopen = true
+) {
+  let envState = createBrowserEnv(viewport, instruction);
+  const browser = envState.appStates.browserLite["browser-main"];
+  setBrowserExplorer(browser, "workflow", "workflow_mail_bridge");
+  envState = addRepresentativeNote(envState, fileId, fileName, initialContent, preopen);
+  return {
+    envState,
+    targets: {
+      targetFileId: fileId,
+      targetCategoryId: categoryId,
+      targetBrowserTaskId: taskId,
+      appendText,
+      expectedSavedContent: initialContent + appendText
+    }
+  };
+}
+
+function findTask(predicate: (task: BrowserTaskCard) => boolean) {
+  const match = listBrowserTasks().find((entry) => predicate(entry.task));
+  if (!match) {
+    throw new Error("Expected browser task match was not found.");
+  }
+  return match;
+}
+
+const windowControls = getBrowserHelpTopic("window-controls");
+const workflowNotes = getBrowserHelpTopic("workflow-notes");
+const keyboardShortcuts = getBrowserHelpTopic("keyboard-shortcuts");
+const workflowMailBridge = getBrowserTask("workflow", "workflow_mail_bridge");
+const workflowTerminalCapture = getBrowserTask("workflow", "workflow_terminal_capture");
+const workflowHelpDigest = getBrowserTask("workflow", "workflow_help_digest");
+const thunderbirdMockNotes = getBrowserTask("thunderbird", "thunderbird_mock_notes");
+const chromeBookmarkCleanup = getBrowserTask("chrome", "chrome_bookmark_cleanup");
+const chromeHelpCapture = getBrowserTask("chrome", "chrome_help_capture");
+const terminalTask = findTask((task) => task.appRefs.includes("Terminal"));
+const mailSummaryTask = findTask((task) => task.title.includes("summary"));
+const desktopFirefoxTask = findTask((task) => task.owner === "Desktop Team" && task.difficulty === "Easy" && task.appRefs.includes("Firefox"));
+const hardSupportTask = findTask((task) => task.owner === "Support Docs" && task.difficulty === "Hard");
+
+export const REPRESENTATIVE_BROWSER_EXTENDED_TASKS: TaskSpec[] = [
+  {
+    id: "browser_help_topic_title_to_note",
+    instruction: "In Firefox, switch to Window controls, write its topic title into topic-title.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 60,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "topic-title.txt is already open beside Firefox and distractor files remain visible in File Explorer.",
+      objective: "Switch to the requested help topic, record its title in the open note, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpTask(
+        viewport,
+        "In Firefox, switch to Window controls, write its topic title into topic-title.txt, and save.",
+        "window-controls",
+        "file-topic-title",
+        "topic-title.txt",
+        windowControls.title
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_help_header_and_tip_to_note",
+    instruction: "In Firefox, switch to Window controls, write its title and first help line into topic-brief.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 64,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "topic-brief.txt is already open and Firefox starts on the wrong page.",
+      objective: "Capture a two-line help brief from the requested topic and save it in the open note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpTask(
+        viewport,
+        "In Firefox, switch to Window controls, write its title and first help line into topic-brief.txt, and save.",
+        "window-controls",
+        "file-topic-brief",
+        "topic-brief.txt",
+        windowControls.title + "\n" + windowControls.lines[0]
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_help_bookmark_capture_note",
+    instruction: "In Firefox, use the Ubuntu Docs bookmark, switch to Workflow notes, write its first detail line into bookmark-help-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 64,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "bookmark-help-log.txt is unopened in File Explorer while Firefox starts on Explorer.",
+      objective: "Use the help bookmark, navigate to the requested topic, open the note, and save the requested detail line.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      const built = buildHelpTask(
+        viewport,
+        "In Firefox, use the Ubuntu Docs bookmark, switch to Workflow notes, write its first detail line into bookmark-help-log.txt, and save.",
+        "workflow-notes",
+        "file-bookmark-help-log",
+        "bookmark-help-log.txt",
+        workflowNotes.lines[0],
+        "",
+        false
+      );
+      return {
+        ...built,
+        targets: {
+          ...built.targets,
+          targetBookmarkId: "ubuntu-docs",
+          targetPage: "help"
+        }
+      };
+    },
+    goalPredicates: ["browser.bookmark_opened", "browser.help_topic_opened", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.bookmark_opened", "browser.help_topic_opened", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_action_count_note",
+    instruction: "In Firefox OSWorld Explorer, select the Bridge a Thunderbird summary into notes task, write its action count into action-count.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 64,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "action-count.txt is already open and Firefox shows a different task card.",
+      objective: "Select the requested Workflow task, count its visible actions, record that line, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Bridge a Thunderbird summary into notes task, write its action count into action-count.txt, and save.",
+        "workflow",
+        "workflow_mail_bridge",
+        "file-action-count",
+        "action-count.txt",
+        "Action count: " + String(workflowMailBridge.actions.length)
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_apps_note",
+    instruction: "In Firefox OSWorld Explorer, select the Capture terminal output in notes task, write its app list into task-apps-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 64,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "task-apps-log.txt is already open and distractor files remain visible beside Firefox.",
+      objective: "Select the requested task, record its app list into the open note, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Capture terminal output in notes task, write its app list into task-apps-log.txt, and save.",
+        "workflow",
+        "workflow_terminal_capture",
+        "file-task-apps-log",
+        "task-apps-log.txt",
+        "Apps: " + formatBrowserTaskApps(workflowTerminalCapture)
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_owner_difficulty_note",
+    instruction: "In Firefox OSWorld Explorer, select the Capture the mock environment reminder task, write its owner and difficulty into owner-difficulty.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 64,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "owner-difficulty.txt is already open with distractor files visible in File Explorer.",
+      objective: "Select the requested Thunderbird task, record both owner and difficulty into the open note, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Capture the mock environment reminder task, write its owner and difficulty into owner-difficulty.txt, and save.",
+        "thunderbird",
+        "thunderbird_mock_notes",
+        "file-owner-difficulty",
+        "owner-difficulty.txt",
+        "Owner: " + thunderbirdMockNotes.owner + "\nDifficulty: " + thunderbirdMockNotes.difficulty
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_full_card_note",
+    instruction: "In Firefox OSWorld Explorer, select the Clean up a browser bookmark note task, write its id, title, owner, and difficulty into task-card-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "task-card-log.txt is already open and Firefox still shows the wrong task card.",
+      objective: "Select the requested Chrome task, record a four-line task card summary, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Clean up a browser bookmark note task, write its id, title, owner, and difficulty into task-card-log.txt, and save.",
+        "chrome",
+        "chrome_bookmark_cleanup",
+        "file-task-card-log",
+        "task-card-log.txt",
+        "Task ID: " + chromeBookmarkCleanup.id + "\nTitle: " + chromeBookmarkCleanup.title + "\nOwner: " + chromeBookmarkCleanup.owner + "\nDifficulty: " + chromeBookmarkCleanup.difficulty
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_find_terminal_task_and_log_id",
+    instruction: "In Firefox OSWorld Explorer, find the task whose app list includes Terminal, write its task id into compare-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "compare-log.txt is unopened in File Explorer while Firefox starts on a non-terminal task card.",
+      objective: "Search the visible task cards by metadata, find the only task that mentions Terminal, and save its id into the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, find the task whose app list includes Terminal, write its task id into compare-log.txt, and save.",
+        terminalTask.categoryId,
+        terminalTask.task.id,
+        "file-compare-log",
+        "compare-log.txt",
+        terminalTask.task.id,
+        "",
+        false
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_find_mail_review_task_and_log_title",
+    instruction: "In Firefox OSWorld Explorer, find the task about reviewing a Thunderbird summary, write its title into review-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "review-log.txt is already open and Firefox starts on the wrong task card.",
+      objective: "Identify the task whose title mentions the Thunderbird summary workflow, record its title, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, find the task about reviewing a Thunderbird summary, write its title into review-log.txt, and save.",
+        mailSummaryTask.categoryId,
+        mailSummaryTask.task.id,
+        "file-review-log",
+        "review-log.txt",
+        mailSummaryTask.task.title
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_find_easy_desktop_task_and_log_id",
+    instruction: "In Firefox OSWorld Explorer, find the easy Desktop Team task that still uses Firefox, write its id into desktop-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "desktop-log.txt is already open beside Firefox and distractor files remain visible.",
+      objective: "Use owner, difficulty, and app metadata together to identify the requested OS task, then save its id.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, find the easy Desktop Team task that still uses Firefox, write its id into desktop-log.txt, and save.",
+        desktopFirefoxTask.categoryId,
+        desktopFirefoxTask.task.id,
+        "file-desktop-log",
+        "desktop-log.txt",
+        desktopFirefoxTask.task.id
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_find_hard_support_task_and_log_title",
+    instruction: "In Firefox OSWorld Explorer, find the hard Support Docs task, write its title into support-log.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "support-log.txt is unopened while Firefox starts on a different task card.",
+      objective: "Use owner and difficulty metadata together to identify the requested task, open the note, and save its title.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, find the hard Support Docs task, write its title into support-log.txt, and save.",
+        hardSupportTask.categoryId,
+        hardSupportTask.task.id,
+        "file-support-log",
+        "support-log.txt",
+        hardSupportTask.task.title,
+        "",
+        false
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_compare_help_topics_and_log_title",
+    instruction: "In Firefox Ubuntu help, compare Dock basics and Keyboard shortcuts, write the topic that mentions Ctrl+S into topic-compare.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "topic-compare.txt is already open beside Firefox while Explorer remains on screen with distractor files.",
+      objective: "Compare two help topics by their visible lines, identify the one that mentions Ctrl+S, and save its title.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpTask(
+        viewport,
+        "In Firefox Ubuntu help, compare Dock basics and Keyboard shortcuts, write the topic that mentions Ctrl+S into topic-compare.txt, and save.",
+        "keyboard-shortcuts",
+        "file-topic-compare",
+        "topic-compare.txt",
+        keyboardShortcuts.title
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_compare_two_tasks_and_log_common_app",
+    instruction: "In Firefox OSWorld Explorer, compare Capture terminal output in notes and Capture the Ubuntu help reminder, write their shared app into common-app.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "common-app.txt is already open while Firefox starts on the Workflow category.",
+      objective: "Compare the app lists on two different task cards, identify the shared app, and save it in the open note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, compare Capture terminal output in notes and Capture the Ubuntu help reminder, write their shared app into common-app.txt, and save.",
+        "chrome",
+        "chrome_help_capture",
+        "file-common-app",
+        "common-app.txt",
+        "Text Editor"
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_fix_help_digest_note",
+    instruction: "In Firefox, switch to Workflow notes, append its title and second detail line to help-digest.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_brief_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "help-digest.txt is already open with a heading while Firefox starts on Explorer.",
+      objective: "Capture a second help-topic digest block into the open note and save it.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpTask(
+        viewport,
+        "In Firefox, switch to Workflow notes, append its title and second detail line to help-digest.txt, and save.",
+        "workflow-notes",
+        "file-help-digest",
+        "help-digest.txt",
+        "Topic: " + workflowNotes.title + "\nReminder: " + workflowNotes.lines[1],
+        "Saved digest:\n",
+        true
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_fix_task_owner_brief_note",
+    instruction: "In Firefox OSWorld Explorer, select the Capture the Ubuntu help reminder task, append its owner and apps block to owner-brief.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_brief_to_note",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "owner-brief.txt is already open with a heading and Firefox starts on the wrong task card.",
+      objective: "Select the requested task, append its owner/apps block to the note, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Capture the Ubuntu help reminder task, append its owner and apps block to owner-brief.txt, and save.",
+        "chrome",
+        "chrome_help_capture",
+        "file-owner-brief",
+        "owner-brief.txt",
+        "Owner: " + chromeHelpCapture.owner + "\nApps: " + formatBrowserTaskApps(chromeHelpCapture),
+        "Owner brief:\n",
+        true
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_bookmark_task_title_to_note",
+    instruction: "In Firefox, use the Research Board bookmark to open OSWorld Explorer, select the Capture the Ubuntu help reminder task, write its title into bookmark-task-title.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      subtype: "task-title-via-bookmark",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "Firefox starts on Ubuntu help while bookmark-task-title.txt is unopened in File Explorer.",
+      objective: "Use the Research Board bookmark to reopen Explorer, select the requested task, record its title, and save the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      const built = buildTaskTask(
+        viewport,
+        "In Firefox, use the Research Board bookmark to open OSWorld Explorer, select the Capture the Ubuntu help reminder task, write its title into bookmark-task-title.txt, and save.",
+        "chrome",
+        "chrome_help_capture",
+        "file-bookmark-task-title",
+        "bookmark-task-title.txt",
+        chromeHelpCapture.title,
+        "",
+        false
+      );
+      setBrowserHelp(built.envState.appStates.browserLite["browser-main"], "workflow-notes");
+      return {
+        ...built,
+        targets: {
+          ...built.targets,
+          targetBookmarkId: "research-board",
+          targetPage: "explorer"
+        }
+      };
+    },
+    goalPredicates: ["browser.bookmark_opened", "browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.bookmark_opened", "browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_help_two_lines_to_note",
+    instruction: "In Firefox, switch to Window controls, write its first and second help lines into window-controls-note.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      subtype: "help-two-lines",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "window-controls-note.txt is already open beside Firefox while distractor files remain visible in File Explorer.",
+      objective: "Switch to the requested help topic, capture both visible help lines, and save the open note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpTask(
+        viewport,
+        "In Firefox, switch to Window controls, write its first and second help lines into window-controls-note.txt, and save.",
+        "window-controls",
+        "file-window-controls-note",
+        "window-controls-note.txt",
+        windowControls.lines[0] + "\n" + windowControls.lines[1]
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_actions_to_note",
+    instruction: "In Firefox OSWorld Explorer, select the Bridge a Thunderbird summary into notes task, write its first and last actions into task-actions.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      subtype: "task-actions-first-last",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "task-actions.txt is already open while Firefox still shows a different task card.",
+      objective: "Select the requested workflow task, record its first and last actions, and save the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Bridge a Thunderbird summary into notes task, write its first and last actions into task-actions.txt, and save.",
+        "workflow",
+        "workflow_mail_bridge",
+        "file-task-actions",
+        "task-actions.txt",
+        "First action: " + workflowMailBridge.actions[0] + "\nLast action: " + workflowMailBridge.actions[workflowMailBridge.actions.length - 1]
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_compare_tasks_and_log_shared_owner",
+    instruction: "In Firefox OSWorld Explorer, compare Clean up a browser bookmark note and Digest a help topic into notes, write their shared owner into shared-owner.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      subtype: "task-compare-shared-owner",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "shared-owner.txt is unopened in File Explorer while Firefox starts on a different task card.",
+      objective: "Compare the two requested task cards, identify their shared owner, and save it into the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, compare Clean up a browser bookmark note and Digest a help topic into notes, write their shared owner into shared-owner.txt, and save.",
+        "chrome",
+        "chrome_bookmark_cleanup",
+        "file-shared-owner",
+        "shared-owner.txt",
+        chromeBookmarkCleanup.owner,
+        "",
+        false
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  }
+];

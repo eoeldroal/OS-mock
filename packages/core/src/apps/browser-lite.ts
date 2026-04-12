@@ -76,10 +76,27 @@ export function getBrowserLiteLayout(bounds: Rect, state: BrowserLiteState) {
     height: tasksBounds.height
   };
 
+  const helpTopicsBounds = {
+    x: bookmarksBounds.x + bookmarksBounds.width + 14,
+    y: bookmarksBounds.y + 32,
+    width: 188,
+    height: bookmarksBounds.height - 32
+  };
+
+  const helpDetailBounds = {
+    x: helpTopicsBounds.x + helpTopicsBounds.width + 18,
+    y: bookmarksBounds.y + 32,
+    width:
+      contentFrameBounds.x + contentFrameBounds.width - CONTENT_INSET - (helpTopicsBounds.x + helpTopicsBounds.width + 18),
+    height: helpTopicsBounds.height
+  };
+
   const selectedCategory =
     state.categories.find((category) => category.id === state.selectedCategoryId) ?? state.categories[0];
   const selectedTask =
     selectedCategory?.tasks.find((task) => task.id === state.selectedTaskId) ?? selectedCategory?.tasks[0];
+  const selectedHelpTopic =
+    state.helpTopics.find((topic) => topic.id === state.selectedHelpTopicId) ?? state.helpTopics[0];
 
   return {
     tabsBounds,
@@ -89,8 +106,11 @@ export function getBrowserLiteLayout(bounds: Rect, state: BrowserLiteState) {
     categoriesBounds,
     tasksBounds,
     detailBounds,
+    helpTopicsBounds,
+    helpDetailBounds,
     selectedCategory,
     selectedTask,
+    selectedHelpTopic,
     tabRects: state.tabs.map((_, index) => ({
       x: tabsBounds.x + index * 122,
       y: tabsBounds.y,
@@ -99,7 +119,8 @@ export function getBrowserLiteLayout(bounds: Rect, state: BrowserLiteState) {
     })),
     bookmarkRects: state.bookmarks.map((_, index) => rowBounds(bookmarksBounds, index, 26)),
     categoryRects: state.categories.map((_, index) => rowBounds(categoriesBounds, index, 34)),
-    taskRects: (selectedCategory?.tasks ?? []).map((_, index) => rowBounds(tasksBounds, index, 70, 10))
+    taskRects: (selectedCategory?.tasks ?? []).map((_, index) => rowBounds(tasksBounds, index, 70, 10)),
+    helpTopicRects: state.helpTopics.map((_, index) => rowBounds(helpTopicsBounds, index, 38, 10))
   };
 }
 
@@ -113,12 +134,18 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
       url: "https://os-world.github.io/explorer.html",
       pageTitle: "OSWorld Explorer",
       currentPage: "explorer",
-      tabs: [{ id: "tab-1", title: "OSWorld Explorer", active: true }],
+      tabs: [
+        { id: "tab-1", title: "OSWorld Explorer", active: true },
+        { id: "tab-2", title: "Ubuntu help", active: false }
+      ],
       bookmarks: [],
       categories: [],
       selectedCategoryId: "",
       selectedTaskId: "",
-      helpLines: []
+      helpTopics: [],
+      selectedHelpTopicId: "",
+      helpLines: [],
+      lastOpenedBookmarkId: undefined
     };
   },
   reduce(state) {
@@ -131,7 +158,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
       state.currentPage === "explorer"
         ? [
             {
-              id: `${ctx.window.id}-categories`,
+              id: ctx.window.id + "-categories",
               role: "list",
               name: "Explorer categories",
               bounds: nextLayout.categoriesBounds,
@@ -140,7 +167,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
               focusable: true,
               focused: false,
               children: state.categories.map((category, index) => ({
-                id: `${ctx.window.id}-category-${category.id}`,
+                id: ctx.window.id + "-category-" + category.id,
                 role: "listitem",
                 name: category.label,
                 bounds: nextLayout.categoryRects[index],
@@ -152,7 +179,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
               }))
             },
             {
-              id: `${ctx.window.id}-tasks`,
+              id: ctx.window.id + "-tasks",
               role: "list",
               name: "Explorer tasks",
               bounds: nextLayout.tasksBounds,
@@ -161,7 +188,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
               focusable: true,
               focused: false,
               children: (nextLayout.selectedCategory?.tasks ?? []).map((task, index) => ({
-                id: `${ctx.window.id}-task-${task.id}`,
+                id: ctx.window.id + "-task-" + task.id,
                 role: "listitem",
                 name: task.title,
                 text: task.id,
@@ -174,12 +201,15 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
               }))
             },
             {
-              id: `${ctx.window.id}-task-detail`,
+              id: ctx.window.id + "-task-detail",
               role: "textbox",
               name: nextLayout.selectedTask?.title ?? "Task detail",
               text: [
                 nextLayout.selectedTask?.id ?? "",
                 nextLayout.selectedTask?.instruction ?? "",
+                nextLayout.selectedTask?.owner ? "Owner: " + nextLayout.selectedTask.owner : "",
+                nextLayout.selectedTask?.difficulty ? "Difficulty: " + nextLayout.selectedTask.difficulty : "",
+                nextLayout.selectedTask?.appRefs?.length ? "Apps: " + nextLayout.selectedTask.appRefs.join(", ") : "",
                 ...(nextLayout.selectedTask?.actions ?? [])
               ]
                 .filter(Boolean)
@@ -191,7 +221,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
               focused: false,
               children: [
                 {
-                  id: `${ctx.window.id}-task-id`,
+                  id: ctx.window.id + "-task-id",
                   role: "label",
                   name: "Task ID",
                   text: nextLayout.selectedTask?.id ?? "",
@@ -208,15 +238,66 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
                   children: []
                 },
                 {
-                  id: `${ctx.window.id}-instruction`,
+                  id: ctx.window.id + "-instruction",
                   role: "label",
                   name: "Instruction",
                   text: nextLayout.selectedTask?.instruction ?? "",
                   bounds: {
                     x: nextLayout.detailBounds.x,
-                    y: nextLayout.detailBounds.y + 40,
+                    y: nextLayout.detailBounds.y + 36,
                     width: nextLayout.detailBounds.width,
-                    height: 60
+                    height: 72
+                  },
+                  visible: true,
+                  enabled: true,
+                  focusable: false,
+                  focused: false,
+                  children: []
+                },
+                {
+                  id: ctx.window.id + "-owner",
+                  role: "label",
+                  name: "Owner",
+                  text: nextLayout.selectedTask?.owner ?? "",
+                  bounds: {
+                    x: nextLayout.detailBounds.x,
+                    y: nextLayout.detailBounds.y + 122,
+                    width: nextLayout.detailBounds.width,
+                    height: 22
+                  },
+                  visible: true,
+                  enabled: true,
+                  focusable: false,
+                  focused: false,
+                  children: []
+                },
+                {
+                  id: ctx.window.id + "-difficulty",
+                  role: "label",
+                  name: "Difficulty",
+                  text: nextLayout.selectedTask?.difficulty ?? "",
+                  bounds: {
+                    x: nextLayout.detailBounds.x,
+                    y: nextLayout.detailBounds.y + 148,
+                    width: nextLayout.detailBounds.width,
+                    height: 22
+                  },
+                  visible: true,
+                  enabled: true,
+                  focusable: false,
+                  focused: false,
+                  children: []
+                },
+                {
+                  id: ctx.window.id + "-apps",
+                  role: "label",
+                  name: "Apps",
+                  text: nextLayout.selectedTask?.appRefs?.join(", ") ?? "",
+                  bounds: {
+                    x: nextLayout.detailBounds.x,
+                    y: nextLayout.detailBounds.y + 174,
+                    width: nextLayout.detailBounds.width,
+                    height: 42
                   },
                   visible: true,
                   enabled: true,
@@ -225,13 +306,13 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
                   children: []
                 },
                 ...(nextLayout.selectedTask?.actions ?? []).map((action, index) => ({
-                  id: `${ctx.window.id}-action-${index}`,
+                  id: ctx.window.id + "-action-" + index,
                   role: "label" as const,
-                  name: `Action ${index + 1}`,
+                  name: "Action " + (index + 1),
                   text: action,
                   bounds: {
                     x: nextLayout.detailBounds.x,
-                    y: nextLayout.detailBounds.y + 120 + index * 24,
+                    y: nextLayout.detailBounds.y + 228 + index * 24,
                     width: nextLayout.detailBounds.width,
                     height: 22
                   },
@@ -246,38 +327,78 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
           ]
         : [
             {
-              id: `${ctx.window.id}-help`,
-              role: "textbox",
-              name: "Ubuntu help",
-              text: state.helpLines.join("\n"),
-              bounds: nextLayout.detailBounds,
+              id: ctx.window.id + "-help-topics",
+              role: "list",
+              name: "Help topics",
+              bounds: nextLayout.helpTopicsBounds,
               visible: true,
               enabled: true,
               focusable: true,
               focused: false,
-              children: state.helpLines.map((line, index) => ({
-                id: `${ctx.window.id}-help-line-${index}`,
-                role: "label",
-                name: `Help line ${index + 1}`,
-                text: line,
-                bounds: {
-                  x: nextLayout.detailBounds.x,
-                  y: nextLayout.detailBounds.y + index * 28,
-                  width: nextLayout.detailBounds.width,
-                  height: 24
-                },
+              children: state.helpTopics.map((topic, index) => ({
+                id: ctx.window.id + "-help-topic-" + topic.id,
+                role: "listitem",
+                name: topic.title,
+                bounds: nextLayout.helpTopicRects[index],
                 visible: true,
                 enabled: true,
-                focusable: false,
-                focused: false,
+                focusable: true,
+                focused: topic.id === state.selectedHelpTopicId,
                 children: []
               }))
+            },
+            {
+              id: ctx.window.id + "-help",
+              role: "textbox",
+              name: nextLayout.selectedHelpTopic?.title ?? "Ubuntu help",
+              text: [nextLayout.selectedHelpTopic?.title ?? "", ...state.helpLines].filter(Boolean).join("\n"),
+              bounds: nextLayout.helpDetailBounds,
+              visible: true,
+              enabled: true,
+              focusable: true,
+              focused: false,
+              children: [
+                {
+                  id: ctx.window.id + "-help-topic-title",
+                  role: "label",
+                  name: "Help topic title",
+                  text: nextLayout.selectedHelpTopic?.title ?? "",
+                  bounds: {
+                    x: nextLayout.helpDetailBounds.x,
+                    y: nextLayout.helpDetailBounds.y,
+                    width: nextLayout.helpDetailBounds.width,
+                    height: 28
+                  },
+                  visible: true,
+                  enabled: true,
+                  focusable: false,
+                  focused: false,
+                  children: []
+                },
+                ...state.helpLines.map((line, index) => ({
+                  id: ctx.window.id + "-help-line-" + index,
+                  role: "label" as const,
+                  name: "Help line " + (index + 1),
+                  text: line,
+                  bounds: {
+                    x: nextLayout.helpDetailBounds.x,
+                    y: nextLayout.helpDetailBounds.y + 48 + index * 32,
+                    width: nextLayout.helpDetailBounds.width,
+                    height: 26
+                  },
+                  visible: true,
+                  enabled: true,
+                  focusable: false,
+                  focused: false,
+                  children: []
+                }))
+              ]
             }
           ];
 
     return [
       {
-        id: `${ctx.window.id}-window`,
+        id: ctx.window.id + "-window",
         role: "window",
         name: ctx.window.title,
         bounds: ctx.window.bounds,
@@ -287,7 +408,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
         focused: ctx.window.focused,
         children: [
           ...state.tabs.map((tab, index) => ({
-            id: `${ctx.window.id}-tab-${tab.id}`,
+            id: ctx.window.id + "-tab-" + tab.id,
             role: "button" as const,
             name: tab.title,
             bounds: nextLayout.tabRects[index],
@@ -298,7 +419,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
             children: []
           })),
           {
-            id: `${ctx.window.id}-address`,
+            id: ctx.window.id + "-address",
             role: "textbox",
             name: "Address bar",
             text: state.url,
@@ -310,7 +431,7 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
             children: []
           },
           {
-            id: `${ctx.window.id}-bookmarks`,
+            id: ctx.window.id + "-bookmarks",
             role: "list",
             name: "Bookmarks",
             bounds: nextLayout.bookmarksBounds,
@@ -319,14 +440,14 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
             focusable: true,
             focused: false,
             children: state.bookmarks.map((bookmark, index) => ({
-              id: `${ctx.window.id}-bookmark-${bookmark.toLowerCase().replace(/\s+/g, "-")}`,
+              id: ctx.window.id + "-bookmark-" + bookmark.id,
               role: "listitem",
-              name: bookmark,
+              name: bookmark.label,
               bounds: nextLayout.bookmarkRects[index],
               visible: true,
               enabled: true,
               focusable: true,
-              focused: false,
+              focused: bookmark.id === state.lastOpenedBookmarkId,
               children: []
             }))
           },
@@ -347,7 +468,10 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
       categories: state.categories,
       selectedCategoryId: state.selectedCategoryId,
       selectedTaskId: state.selectedTaskId,
-      helpLines: state.helpLines
+      helpTopics: state.helpTopics,
+      selectedHelpTopicId: state.selectedHelpTopicId,
+      helpLines: state.helpLines,
+      lastOpenedBookmarkId: state.lastOpenedBookmarkId
     };
   }
 };

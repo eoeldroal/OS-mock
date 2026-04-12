@@ -30,6 +30,7 @@ export class HostApp {
   private readonly wss = new WebSocketServer({ noServer: true });
   private nextSessionId = 1;
   private started = false;
+  private wsHandlersRegistered = false;
   readonly baseUrl = "http://127.0.0.1:4315";
 
   async start() {
@@ -60,7 +61,7 @@ export class HostApp {
       if (!action) {
         return reply.code(400).send({ error: "Missing action payload." });
       }
-      return reply.send(this.viewerAction(sessionId, action));
+      return reply.send(await this.viewerAction(sessionId, action));
     });
 
     this.fastify.get("/session/:sessionId", async (_, reply) => {
@@ -72,45 +73,68 @@ export class HostApp {
         .send("<html><body><h1>OS Mock Viewer</h1><p>Run npm run build:web first.</p></body></html>");
     });
 
-    this.fastify.server.on("upgrade", (request, socket, head) => {
-      if (!request.url?.startsWith("/ws")) {
-        socket.destroy();
-        return;
-      }
-      this.wss.handleUpgrade(request, socket, head, (ws) => {
-        this.wss.emit("connection", ws, request);
+    if (!this.wsHandlersRegistered) {
+      this.fastify.server.on("upgrade", (request, socket, head) => {
+        if (!request.url?.startsWith("/ws")) {
+          socket.destroy();
+          return;
+        }
+        this.wss.handleUpgrade(request, socket, head, (ws) => {
+          this.wss.emit("connection", ws, request);
+        });
       });
-    });
 
-    this.wss.on("connection", (ws: WebSocket, request: IncomingMessage) => {
-      const url = new URL(request.url ?? "/ws", this.baseUrl);
-      const sessionId = url.searchParams.get("sessionId");
-      if (!sessionId || !this.sessions.has(sessionId)) {
-        ws.close();
-        return;
-      }
-      let subscribers = this.subscribers.get(sessionId);
-      if (!subscribers) {
-        subscribers = new Set<WebSocket>();
-        this.subscribers.set(sessionId, subscribers);
-      }
-      subscribers.add(ws);
-      ws.send(JSON.stringify(this.sessions.get(sessionId)!.env.getRenderModel()));
-      ws.on("close", () => {
-        subscribers?.delete(ws);
+      this.wss.on("connection", (ws: WebSocket, request: IncomingMessage) => {
+        const url = new URL(request.url ?? "/ws", this.baseUrl);
+        const sessionId = url.searchParams.get("sessionId");
+        if (!sessionId || !this.sessions.has(sessionId)) {
+          ws.close();
+          return;
+        }
+        let subscribers = this.subscribers.get(sessionId);
+        if (!subscribers) {
+          subscribers = new Set<WebSocket>();
+          this.subscribers.set(sessionId, subscribers);
+        }
+        subscribers.add(ws);
+        ws.send(JSON.stringify(this.sessions.get(sessionId)!.env.getRenderModel()));
+        ws.on("close", () => {
+          subscribers?.delete(ws);
+        });
       });
-    });
 
-    await this.fastify.listen({ host: "127.0.0.1", port: 4315 });
+      this.wsHandlersRegistered = true;
+    }
+
+    try {
+      await this.fastify.listen({ host: "127.0.0.1", port: 4315 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+        throw new Error(`Failed to start MCP viewer host on ${this.baseUrl}: port 4315 is already in use.`);
+      }
+      throw error;
+    }
     this.started = true;
   }
 
   async stop() {
     await this.screenshotService.close();
+    for (const sessionId of this.subscribers.keys()) {
+      this.closeSubscribers(sessionId);
+    }
     if (this.started) {
       await this.fastify.close();
       this.started = false;
     }
+    await new Promise<void>((resolve, reject) => {
+      this.wss.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   }
 
   createSession(opts?: { seed?: number; viewport?: Viewport; viewer?: boolean }) {
@@ -134,8 +158,7 @@ export class HostApp {
 
   closeSession(sessionId: string) {
     this.sessions.delete(sessionId);
-    this.subscribers.get(sessionId)?.forEach((socket) => socket.close());
-    this.subscribers.delete(sessionId);
+    this.closeSubscribers(sessionId);
     return { sessionId, closed: true };
   }
 
@@ -177,11 +200,11 @@ export class HostApp {
   }
 
   async step(sessionId: string, action: Computer13Action) {
-    const session = this.getSession(sessionId);
-    const result = session.env.step(action);
-    const decorated = await this.decorateResult(session, result);
-    this.broadcast(sessionId);
-    return decorated;
+    return this.runSessionAction(sessionId, action, { captureScreenshot: true });
+  }
+
+  async viewerAction(sessionId: string, action: Computer13Action) {
+    return this.runSessionAction(sessionId, action, { captureScreenshot: false });
   }
 
   async applyPerturbation(sessionId: string, op: string, params?: Record<string, unknown>) {
@@ -206,13 +229,6 @@ export class HostApp {
     return decorated;
   }
 
-  viewerAction(sessionId: string, action: Computer13Action) {
-    const session = this.getSession(sessionId);
-    const result = session.env.step(action);
-    this.broadcast(sessionId);
-    return result;
-  }
-
   private getSession(sessionId: string) {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -234,13 +250,37 @@ export class HostApp {
     });
   }
 
+  private closeSubscribers(sessionId: string) {
+    this.subscribers.get(sessionId)?.forEach((socket) => socket.close());
+    this.subscribers.delete(sessionId);
+  }
+
+  private async runSessionAction(
+    sessionId: string,
+    action: Computer13Action,
+    options: { captureScreenshot: boolean }
+  ) {
+    const session = this.getSession(sessionId);
+    const result = session.env.step(action);
+    const decorated = options.captureScreenshot
+      ? await this.decorateResult(session, result)
+      : this.attachViewerMetadata(session, result);
+    this.broadcast(sessionId);
+    return decorated;
+  }
+
   private async decorateResult(session: SessionRecord, result: StepResult) {
+    this.attachViewerMetadata(session, result);
     const screenshotPath = await this.screenshotService.capture(
       session.id,
       result.stepIndex,
       session.viewerUrl
     );
     result.observation.screenshotPath = screenshotPath;
+    return result;
+  }
+
+  private attachViewerMetadata(session: SessionRecord, result: StepResult) {
     result.observation.viewerUrl = session.viewerUrl;
     return result;
   }

@@ -21,7 +21,7 @@ The project is working end to end.
 - Starter tasks pass through the core environment and through the MCP layer
 - The shell now looks Ubuntu/GNOME-like rather than a generic desktop mock
 - Representative apps from the OSWorld paper direction have been added: Files, Text Editor, Firefox, Terminal, Thunderbird
-- The OSWorld Explorer-inspired representative QA suite currently passes all 4 representative tasks end to end
+- The representative QA suite targets the canonical representative browser/mail/terminal scenarios; local reruns may still be blocked by viewer port collisions
 
 This is still a mock, not a realistic full OS. The current goal is breadth of controllable environment composition, not pixel-faithful Ubuntu reproduction.
 
@@ -203,31 +203,28 @@ These references should inform shell/app structure, spacing, and information hie
 
 ## Current Starter Tasks
 
-- `dismiss_popup_then_append_note`
-- `rename_note_in_explorer`
-- `copy_line_between_windows`
-- `minimize_recover_and_save`
+Current starter inventory: `25`
 
-Task definitions live under:
+Starter task definitions live under:
 
-- `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/starter-tasks.ts`
+- `packages/core/src/tasks/starter/`
+- starter entrypoint: `packages/core/src/tasks/starter/index.ts`
 
 ## Current Representative Tasks
 
-These tasks are intended to be closer to OSWorld Explorer-style RL rollouts than the minimal starter set.
-
-- `browser_log_workflow_task_id`
-- `browser_capture_help_line`
-- `mail_extract_mock_note`
-- `terminal_record_working_directory`
+Current representative inventory: `23`
 
 Representative task definitions live under:
 
-- `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/representative-tasks.ts`
+- `packages/core/src/tasks/representative/`
+- representative entrypoint: `packages/core/src/tasks/representative/index.ts`
+
+For the full current task ID list, see `doc/task/task-hub.md`.
 
 Task registry and split handling live under:
 
-- `/Users/baghyeonbin/Desktop/CoWork/packages/core/src/tasks/registry.ts`
+- `packages/core/src/tasks/registry.ts`
+- `trainer.list_tasks`/`listTasks()` returns only agent-safe public catalog fields (`id`, `instruction`, `maxSteps`, `seedDefaults`, `domain`, `split`); internal task metadata is authoring-only and must not be exposed to the agent under test
 
 Supported task splits:
 
@@ -429,8 +426,8 @@ The following were run and passed:
 
 Representative QA pass criteria:
 
-- `browser_log_workflow_task_id`
-- `browser_capture_help_line`
+- `browser_log_task_preopen_note_hard`
+- `browser_help_preopen_note_distractors`
 - `mail_extract_mock_note`
 - `terminal_record_working_directory`
 
@@ -573,10 +570,40 @@ npm run interactive:mcp-client -- --task dismiss_popup_then_append_note --open
 - `/Users/baghyeonbin/Desktop/CoWork/output/playwright/strict-qa/strict-qa-report.json`
 - `/Users/baghyeonbin/Desktop/CoWork/output/playwright/strict-qa`
 
+## Repo-local Task Authoring Skill
+
+For task-family expansion driven by high-level goals, app scope, batch size, split, difficulty mix, variation preferences, and inventory coverage, prefer the repo-local Codex skill at:
+
+- `.codex/skills/os-mock-task-author/SKILL.md`
+
+Expected responsibility of this skill:
+
+- accept partial user input and gather missing task-design information through multiple short follow-up questions
+- expand short requests into task families, variation matrices, and deduped runnable `TaskSpec` implementations
+- support intentionally impossible task design, following `doc/personal/20260410_osworld_impossible_tasks.md`
+- follow `doc/task/osworld-mock-authoring-guide.md` so generated tasks preserve core capability while avoiding benchmark-domain leakage
+- prefer family-first batch generation over isolated one-off task invention
+- keep `doc/task/task-hub.md` and `doc/task/tasks-and-perturbations.md` synchronized with task inventory changes
+- run `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode inventory` after task-inventory changes
+- run `node .codex/skills/os-mock-task-author/scripts/audit-task-batch.mjs --mode candidates --input <candidate-json>` before promoting generated candidates
+- extend evaluator, session reward logic, or predicate space only when the request explicitly allows runnable impossible-task support
+- submit a proposal package for user review before editing task inventory by default
+
+Current policy for this skill:
+
+- default to proposal-first review, not immediate runnable task implementation
+- proposal-only 출력은 한국어 위주로, 필수 승인 정보만 짧게 정리한다
+- treat `starter` as shorter single-app or simple save/complete tasks
+- treat `representative` as longer multi-app extraction workflows
+- impossible tasks are allowed, but remain proposal-only unless runtime expansion is explicitly authorized
+- treat minimized/unfocused/help-start/distractor/existing-content changes as setup variation before creating a brand-new browser task
+- do not use perturbations in the current task-generation flow unless the policy changes later
+- use dedup and quality gates before promoting candidates to new tasks
+
 This file should be kept current whenever:
 
 - the shell layout changes
 - app inventory changes
 - task inventory changes
-- perturbations change
+- task-family generation policy changes
 - visual QA findings change
