@@ -1,6 +1,7 @@
 import type { TaskSpec } from "../types.js";
-import { REPRESENTATIVE_TASKS } from "./representative-tasks.js";
-import { STARTER_TASKS } from "./starter-tasks.js";
+import { REPRESENTATIVE_TASKS } from "./representative/index.js";
+import { STARTER_TASKS } from "./starter/index.js";
+import { FILES_WINDOW_TASKS } from "./files-window-tasks.js";
 
 // 커스텀 태스크 불러오기
 import { 
@@ -57,12 +58,10 @@ import {
 
 export type TaskSplit = "all" | "starter" | "representative" | "train" | "eval";
 
-// 1. ALL_TASKS에 완벽하게 병합
-export const ALL_TASKS: TaskSpec[] = [
-  ...STARTER_TASKS, 
-  ...REPRESENTATIVE_TASKS,
-  
-  // --- [Team 3 Custom Tasks (1~25)] ---
+const FW_STARTER = FILES_WINDOW_TASKS.filter((t) => t.split === "starter");
+const FW_REPRESENTATIVE = FILES_WINDOW_TASKS.filter((t) => t.split === "representative");
+
+const TEAM3_TASKS: TaskSpec[] = [
   mailExtractInvoiceTask,
   terminalListDirTask,
   team3TerminalRecordWorkingDirectoryTask,
@@ -88,8 +87,6 @@ export const ALL_TASKS: TaskSpec[] = [
   terminalCatJsonNestedTask,
   terminalCatPythonImportTask,
   terminalFindSpecificExtensionTask,
-
-  // --- [확장 배치 3 (26~35)] ---
   mailExtractCancellationFeeTask,
   mailExtractHrPhoneTask,
   mailExtractDraftRecipientTask,
@@ -100,14 +97,16 @@ export const ALL_TASKS: TaskSpec[] = [
   terminalFindBackupFileTask,
   terminalCatPackageJsonVersionTask,
   terminalFindShellScriptTask,
-
-  // --- [최종 배치 (36~40)] ---
   terminalCatProcessListTask,
   mailExtractRebookedFlightTask,
   terminalCatYamlConfigTask,
   mailExtractUnsubscribeLinkTask,
   terminalCatCertExpiryTask
 ];
+const TEAM3_STARTER = TEAM3_TASKS.filter((t) => t.split === "starter");
+const TEAM3_REPRESENTATIVE = TEAM3_TASKS.filter((t) => t.split === "representative");
+
+export const ALL_TASKS: TaskSpec[] = [...STARTER_TASKS, ...REPRESENTATIVE_TASKS, ...FILES_WINDOW_TASKS, ...TEAM3_TASKS];
 
 const TASK_MAP = new Map<string, TaskSpec>(ALL_TASKS.map((task) => [task.id, task]));
 
@@ -117,13 +116,15 @@ function resolveTasks(split: TaskSplit = "all") {
     return ALL_TASKS;
   }
   if (split === "starter") {
-    return ALL_TASKS.filter(task => task.split === "starter");
+    return [...STARTER_TASKS, ...FW_STARTER, ...TEAM3_STARTER];
   }
-  // train, eval, representative 등 요청된 split에 맞춰 정확히 필터링
-  return ALL_TASKS.filter(task => task.split === split || task.split === "representative");
+  if (split === "representative" || split === "train" || split === "eval") {
+    return [...REPRESENTATIVE_TASKS, ...FW_REPRESENTATIVE, ...TEAM3_REPRESENTATIVE];
+  }
+  return ALL_TASKS;
 }
 
-function toSummary(task: TaskSpec) {
+function toPublicSummary(task: TaskSpec) {
   return {
     id: task.id,
     instruction: task.instruction,
@@ -134,8 +135,26 @@ function toSummary(task: TaskSpec) {
   };
 }
 
+function toAuthoringSummary(task: TaskSpec) {
+  return {
+    ...toPublicSummary(task),
+    family: task.summary.family,
+    level: task.summary.level,
+    apps: task.summary.apps,
+    startState: task.summary.startState,
+    objective: task.summary.objective,
+    implementationPath: task.summary.implementationPath,
+    goalPredicates: task.goalPredicates,
+    progressPredicates: task.progressPredicates
+  };
+}
+
 export function listTasks(split: TaskSplit = "all") {
-  return resolveTasks(split).map(toSummary);
+  return resolveTasks(split).map(toPublicSummary);
+}
+
+export function listTaskAuthoringMetadata(split: TaskSplit = "all") {
+  return resolveTasks(split).map(toAuthoringSummary);
 }
 
 export function listStarterTasks() {
@@ -152,5 +171,9 @@ export function getTaskSpec(taskId: string): TaskSpec {
 
 export function sampleTask(seed = Date.now(), split: TaskSplit = "all"): TaskSpec {
   const tasks = resolveTasks(split);
-  return tasks[Math.abs(seed) % tasks.length];
+  return tasks[abs(seed) % tasks.length];
+}
+
+function abs(value: number) {
+  return Math.abs(value);
 }

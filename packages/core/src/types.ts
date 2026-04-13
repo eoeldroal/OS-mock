@@ -142,6 +142,37 @@ export type NoteEditorState = {
   dirty: boolean;
 };
 
+export type BrowserBookmark = {
+  id: string;
+  label: string;
+  page: "explorer" | "help";
+  targetCategoryId?: string;
+  targetHelpTopicId?: string;
+};
+
+export type BrowserTaskCard = {
+  id: string;
+  domain: string;
+  title: string;
+  instruction: string;
+  actions: string[];
+  owner: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  appRefs: string[];
+};
+
+export type BrowserTaskCategory = {
+  id: string;
+  label: string;
+  tasks: BrowserTaskCard[];
+};
+
+export type BrowserHelpTopic = {
+  id: string;
+  title: string;
+  lines: string[];
+};
+
 export type BrowserLiteState = {
   id: string;
   appName: string;
@@ -153,21 +184,14 @@ export type BrowserLiteState = {
     title: string;
     active: boolean;
   }>;
-  bookmarks: string[];
-  categories: Array<{
-    id: string;
-    label: string;
-    tasks: Array<{
-      id: string;
-      domain: string;
-      title: string;
-      instruction: string;
-      actions: string[];
-    }>;
-  }>;
+  bookmarks: BrowserBookmark[];
+  categories: BrowserTaskCategory[];
   selectedCategoryId: string;
   selectedTaskId: string;
+  helpTopics: BrowserHelpTopic[];
+  selectedHelpTopicId: string;
   helpLines: string[];
+  lastOpenedBookmarkId?: string;
 };
 
 export type TerminalLiteState = {
@@ -254,11 +278,14 @@ export type BrowserLiteViewModel = {
   pageTitle: string;
   currentPage: BrowserLiteState["currentPage"];
   tabs: BrowserLiteState["tabs"];
-  bookmarks: string[];
+  bookmarks: BrowserLiteState["bookmarks"];
   categories: BrowserLiteState["categories"];
   selectedCategoryId: string;
   selectedTaskId: string;
+  helpTopics: BrowserLiteState["helpTopics"];
+  selectedHelpTopicId: string;
   helpLines: string[];
+  lastOpenedBookmarkId?: string;
 };
 
 export type TerminalLiteViewModel = {
@@ -359,7 +386,10 @@ export type PredicateId =
   | "note.target_pasted"
   | "window.note_restored"
   | "browser.task_selected"
+  | "browser.category_selected"
+  | "browser.bookmark_opened"
   | "browser.help_page_opened"
+  | "browser.help_topic_opened"
   | "mail.message_opened"
   | "terminal.command_ran";
 
@@ -369,6 +399,18 @@ export type ScheduledPerturbation = {
   params?: Record<string, unknown>;
 };
 
+export type TaskLevel = "A" | "B" | "C" | "D";
+
+export type TaskSummary = {
+  family: string;
+  subtype?: string;
+  level: TaskLevel;
+  apps: string[];
+  startState: string;
+  objective: string;
+  implementationPath: string;
+};
+
 export type TaskSpec = {
   id: string;
   instruction: string;
@@ -376,6 +418,7 @@ export type TaskSpec = {
   seedDefaults: number[];
   domain?: string;
   split?: "starter" | "representative";
+  summary: TaskSummary;
   setup(seed: number, viewport: Viewport): TaskSetup;
   goalPredicates: PredicateId[];
   progressPredicates: PredicateId[];

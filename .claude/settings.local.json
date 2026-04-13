@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node generate-ppt.cjs)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)"
+    ]
+  }
+}

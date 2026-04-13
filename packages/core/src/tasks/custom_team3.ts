@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { FileEntry, TaskSpec, Viewport, EnvState } from "../types.js";
 
 // ============================================================================

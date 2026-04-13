@@ -1,4 +1,5 @@
 import { MockOsEnv } from "./env/session.js";
+import { getBrowserHelpTopic, getBrowserTask, getBrowserTaskCategory } from "./browser-fixtures.js";
 import type { A11yNode, Computer13Action } from "./types.js";
 
 function flatten(nodes: A11yNode[]): A11yNode[] {
@@ -29,6 +30,35 @@ function observeNodes(env: MockOsEnv) {
   return env.observe().observation.a11yTree;
 }
 
+function focusNoteTextbox(env: MockOsEnv, fileName: string) {
+  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === fileName);
+  env.step({
+    type: "CLICK",
+    x: textBox.bounds.x + textBox.bounds.width - 12,
+    y: textBox.bounds.y + textBox.bounds.height - 12
+  });
+}
+
+function appendAndSaveOpenNote(env: MockOsEnv, fileName: string, text: string) {
+  focusNoteTextbox(env, fileName);
+  env.step({ type: "TYPING", text });
+  env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
+}
+
+function getTargetFileName(env: MockOsEnv, fileId: string) {
+  const file = env.getHiddenState().envState.fileSystem.files[fileId];
+  if (!file) {
+    throw new Error(`Required file not found: ${fileId}`);
+  }
+  return file.name;
+}
+
+function findHelpTopicIdByLine(line: string) {
+  return ["dock-basics", "window-controls", "workflow-notes", "keyboard-shortcuts"].find((topicId) =>
+    getBrowserHelpTopic(topicId).lines.includes(line)
+  );
+}
+
 export function solveDismissPopupThenAppendNote(seed = 0) {
   const env = new MockOsEnv();
   env.reset({ taskId: "dismiss_popup_then_append_note", seed });
@@ -37,14 +67,7 @@ export function solveDismissPopupThenAppendNote(seed = 0) {
   clickNode(env, dismissButton);
   const todoFile = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "todo.txt");
   clickNode(env, todoFile, "DOUBLE_CLICK");
-  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "todo.txt");
-  env.step({
-    type: "CLICK",
-    x: textBox.bounds.x + textBox.bounds.width - 6,
-    y: textBox.bounds.y + 8
-  });
-  env.step({ type: "TYPING", text: hidden.targets.appendText });
-  env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
+  appendAndSaveOpenNote(env, "todo.txt", hidden.targets.appendText);
   return env.step({ type: "DONE" });
 }
 
@@ -65,12 +88,7 @@ export function solveCopyLineBetweenWindows(seed = 0) {
   const sourceBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "source.txt");
   env.step({ type: "CLICK", x: sourceBox.bounds.x + 10, y: sourceBox.bounds.y + 8 });
   env.step({ type: "HOTKEY", keys: ["ctrl", "c"] });
-  const targetBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "target.txt");
-  env.step({
-    type: "CLICK",
-    x: targetBox.bounds.x + targetBox.bounds.width - 6,
-    y: targetBox.bounds.y + 8
-  });
+  focusNoteTextbox(env, "target.txt");
   env.step({ type: "HOTKEY", keys: ["ctrl", "v"] });
   env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
   return env.step({ type: "DONE" });
@@ -85,41 +103,33 @@ export function solveMinimizeRecoverAndSave(seed = 0) {
   return env.step({ type: "DONE" });
 }
 
-export function solveBrowserLogWorkflowTaskId(seed = 0) {
+export function solveBrowserLogTaskPreopenNoteHard(seed = 0) {
   const env = new MockOsEnv();
-  env.reset({ taskId: "browser_log_workflow_task_id", seed });
+  env.reset({ taskId: "browser_log_task_preopen_note_hard", seed });
   const hidden = env.getHiddenState();
-  const workflow = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "Workflow");
-  clickNode(env, workflow);
-  const bridgeTask = findNode(
-    observeNodes(env),
-    (node) => node.role === "listitem" && node.name === "Bridge a Thunderbird summary into notes"
-  );
-  clickNode(env, bridgeTask);
-  const browserLogFile = findNode(
-    observeNodes(env),
-    (node) => node.role === "listitem" && node.name === "browser-log.txt"
-  );
-  clickNode(env, browserLogFile, "DOUBLE_CLICK");
-  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "browser-log.txt");
-  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + 8 });
-  env.step({ type: "TYPING", text: hidden.targets.appendText });
-  env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
+  const category = getBrowserTaskCategory(hidden.targets.targetCategoryId);
+  const task = getBrowserTask(hidden.targets.targetCategoryId, hidden.targets.targetBrowserTaskId);
+  const categoryNode = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === category.label);
+  clickNode(env, categoryNode);
+  const targetTask = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === task.title);
+  clickNode(env, targetTask);
+  appendAndSaveOpenNote(env, getTargetFileName(env, hidden.targets.targetFileId), hidden.targets.appendText);
   return env.step({ type: "DONE" });
 }
 
-export function solveBrowserCaptureHelpLine(seed = 0) {
+export function solveBrowserHelpPreopenNoteDistractors(seed = 0) {
   const env = new MockOsEnv();
-  env.reset({ taskId: "browser_capture_help_line", seed });
+  env.reset({ taskId: "browser_help_preopen_note_distractors", seed });
   const hidden = env.getHiddenState();
   const helpTab = findNode(observeNodes(env), (node) => node.role === "button" && node.name === "Ubuntu help");
   clickNode(env, helpTab);
-  const helpFile = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "ubuntu-help.txt");
-  clickNode(env, helpFile, "DOUBLE_CLICK");
-  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "ubuntu-help.txt");
-  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + 8 });
-  env.step({ type: "TYPING", text: hidden.targets.appendText });
-  env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
+  const topicId = findHelpTopicIdByLine(hidden.targets.appendText);
+  if (topicId) {
+    const topic = getBrowserHelpTopic(topicId);
+    const topicNode = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === topic.title);
+    clickNode(env, topicNode);
+  }
+  appendAndSaveOpenNote(env, getTargetFileName(env, hidden.targets.targetFileId), hidden.targets.appendText);
   return env.step({ type: "DONE" });
 }
 
@@ -134,10 +144,7 @@ export function solveMailExtractMockNote(seed = 0) {
   clickNode(env, message);
   const file = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "mail-log.txt");
   clickNode(env, file, "DOUBLE_CLICK");
-  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "mail-log.txt");
-  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + 8 });
-  env.step({ type: "TYPING", text: hidden.targets.appendText });
-  env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
+  appendAndSaveOpenNote(env, "mail-log.txt", hidden.targets.appendText);
   return env.step({ type: "DONE" });
 }
 
@@ -151,10 +158,7 @@ export function solveTerminalRecordWorkingDirectory(seed = 0) {
   env.step({ type: "PRESS", key: "enter" });
   const file = findNode(observeNodes(env), (node) => node.role === "listitem" && node.name === "terminal-log.txt");
   clickNode(env, file, "DOUBLE_CLICK");
-  const textBox = findNode(observeNodes(env), (node) => node.role === "textbox" && node.name === "terminal-log.txt");
-  env.step({ type: "CLICK", x: textBox.bounds.x + 8, y: textBox.bounds.y + 8 });
-  env.step({ type: "TYPING", text: hidden.targets.appendText });
-  env.step({ type: "HOTKEY", keys: ["ctrl", "s"] });
+  appendAndSaveOpenNote(env, "terminal-log.txt", hidden.targets.appendText);
   return env.step({ type: "DONE" });
 }
 
@@ -164,9 +168,12 @@ export function runScriptedPolicyDemo() {
     rename_note_in_explorer: solveRenameNoteInExplorer(),
     copy_line_between_windows: solveCopyLineBetweenWindows(),
     minimize_recover_and_save: solveMinimizeRecoverAndSave(),
-    browser_log_workflow_task_id: solveBrowserLogWorkflowTaskId(),
-    browser_capture_help_line: solveBrowserCaptureHelpLine(),
+    browser_log_task_preopen_note_hard: solveBrowserLogTaskPreopenNoteHard(),
+    browser_help_preopen_note_distractors: solveBrowserHelpPreopenNoteDistractors(),
     mail_extract_mock_note: solveMailExtractMockNote(),
     terminal_record_working_directory: solveTerminalRecordWorkingDirectory()
   };
 }
+
+export const solveBrowserLogWorkflowTaskId = solveBrowserLogTaskPreopenNoteHard;
+export const solveBrowserCaptureHelpLine = solveBrowserHelpPreopenNoteDistractors;
