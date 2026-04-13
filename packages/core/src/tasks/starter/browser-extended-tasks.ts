@@ -122,6 +122,7 @@ const workflowNotes = getBrowserHelpTopic("workflow-notes");
 const windowControls = getBrowserHelpTopic("window-controls");
 const osRestore = getBrowserTask("os", "os_restore_window");
 const osPopupDismissal = getBrowserTask("os", "os_popup_dismissal");
+const osDockRelaunch = getBrowserTask("os", "os_dock_relaunch");
 const chromeHelp = getBrowserTask("chrome", "chrome_help_capture");
 const chromeBookmarkCleanup = getBrowserTask("chrome", "chrome_bookmark_cleanup");
 const workflowDigest = getBrowserTask("workflow", "workflow_help_digest");
@@ -583,6 +584,204 @@ export const STARTER_BROWSER_EXTENDED_TASKS: TaskSpec[] = [
     },
     goalPredicates: ["browser.bookmark_opened", "browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
     progressPredicates: ["browser.bookmark_opened", "browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_first_action_to_note",
+    instruction: "In Firefox OSWorld Explorer, select the Relaunch Firefox from the dock task, write its first action into dock-relaunch-step.txt, and save.",
+    domain: "Chrome",
+    split: "starter",
+    maxSteps: 36,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      subtype: "task-first-action",
+      level: "B",
+      apps: ["browser", "note"],
+      startState: "Firefox starts on the wrong task card and dock-relaunch-step.txt remains unopened in File Explorer.",
+      objective: "Select the requested OS task, record its first visible action into a note, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskToNoteTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Relaunch Firefox from the dock task, write its first action into dock-relaunch-step.txt, and save.",
+        "os",
+        "os_dock_relaunch",
+        "file-dock-relaunch-step",
+        "dock-relaunch-step.txt",
+        "First action: " + osDockRelaunch.actions[0]
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_help_title_and_second_line_to_note",
+    instruction: "In Firefox, switch to Window controls, write its title and second help line into restore-brief.txt, and save.",
+    domain: "Chrome",
+    split: "starter",
+    maxSteps: 36,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      subtype: "help-title-second-line-starter",
+      level: "B",
+      apps: ["browser", "note"],
+      startState: "restore-brief.txt is already open while Firefox still shows OSWorld Explorer.",
+      objective: "Switch to the requested help topic, record its title plus the restore reminder, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpToNoteTask(
+        viewport,
+        "In Firefox, switch to Window controls, write its title and second help line into restore-brief.txt, and save.",
+        "window-controls",
+        "file-restore-brief",
+        "restore-brief.txt",
+        "Topic: " + windowControls.title + "\nReminder: " + windowControls.lines[1],
+        "",
+        true
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_last_action_to_note",
+    instruction: "In Firefox OSWorld Explorer, select the Relaunch Firefox from the dock task, write its last action into dock-relaunch-last-step.txt, and save.",
+    domain: "Chrome",
+    split: "starter",
+    maxSteps: 36,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      subtype: "task-last-action",
+      level: "B",
+      apps: ["browser", "note"],
+      startState: "Firefox starts on the wrong task card and dock-relaunch-last-step.txt remains unopened in File Explorer.",
+      objective: "Select the requested OS task, record its final visible action, and save the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskToNoteTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Relaunch Firefox from the dock task, write its last action into dock-relaunch-last-step.txt, and save.",
+        "os",
+        "os_dock_relaunch",
+        "file-dock-relaunch-last-step",
+        "dock-relaunch-last-step.txt",
+        "Last action: " + osDockRelaunch.actions[osDockRelaunch.actions.length - 1]
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_bookmark_help_title_to_note",
+    instruction: "In Firefox, use the Ubuntu Docs bookmark, switch to Workflow notes, write the topic title into workflow-topic.txt, and save.",
+    domain: "Chrome",
+    split: "starter",
+    maxSteps: 36,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      subtype: "bookmark-help-title",
+      level: "B",
+      apps: ["browser", "note"],
+      startState: "Firefox starts on Explorer while workflow-topic.txt is already open in the editor.",
+      objective: "Use the help bookmark, switch to the requested topic, record its title, and save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      const built = buildHelpToNoteTask(
+        viewport,
+        "In Firefox, use the Ubuntu Docs bookmark, switch to Workflow notes, write the topic title into workflow-topic.txt, and save.",
+        "workflow-notes",
+        "file-workflow-topic",
+        "workflow-topic.txt",
+        workflowNotes.title,
+        "",
+        true
+      );
+      return {
+        ...built,
+        targets: {
+          ...built.targets,
+          targetBookmarkId: "ubuntu-docs",
+          targetPage: "help"
+        }
+      };
+    },
+    goalPredicates: ["browser.bookmark_opened", "browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.bookmark_opened", "browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_owner_then_apps_to_note",
+    instruction: "In Firefox OSWorld Explorer, select the Review the Ubuntu desktop task pack task, write its owner followed by its apps into pack-owner-apps.txt, and save.",
+    domain: "Chrome",
+    split: "starter",
+    maxSteps: 36,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      subtype: "task-owner-then-apps",
+      level: "B",
+      apps: ["browser", "note"],
+      startState: "pack-owner-apps.txt is already open while Firefox still shows a different task card.",
+      objective: "Select the requested Thunderbird task, record the owner first and the apps next, then save.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskToNoteTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Review the Ubuntu desktop task pack task, write its owner followed by its apps into pack-owner-apps.txt, and save.",
+        "thunderbird",
+        "thunderbird_task_pack",
+        "file-pack-owner-apps",
+        "pack-owner-apps.txt",
+        "Owner: " + thunderbirdPack.owner + "\nApps used: " + formatBrowserTaskApps(thunderbirdPack),
+        "",
+        true
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_domain_owner_to_note",
+    instruction: "In Firefox OSWorld Explorer, select the Capture the Ubuntu help reminder task, write its domain and owner into chrome-task-note.txt, and save.",
+    domain: "Chrome",
+    split: "starter",
+    maxSteps: 36,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_task_metadata_to_note",
+      subtype: "task-domain-owner",
+      level: "B",
+      apps: ["browser", "note"],
+      startState: "chrome-task-note.txt remains unopened in File Explorer while Firefox starts on the wrong task card.",
+      objective: "Select the requested Chrome task, record its domain and owner, and save the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskToNoteTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Capture the Ubuntu help reminder task, write its domain and owner into chrome-task-note.txt, and save.",
+        "chrome",
+        "chrome_help_capture",
+        "file-chrome-task-note",
+        "chrome-task-note.txt",
+        "Domain: " + chromeHelp.domain + "\nOwner: " + chromeHelp.owner
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
     forbiddenPredicates: []
   }
 ];

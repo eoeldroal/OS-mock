@@ -37,6 +37,7 @@ function toAuthoringSummary(task: TaskSpec) {
   return {
     ...toPublicSummary(task),
     family: task.summary.family,
+    subtype: task.summary.subtype,
     level: task.summary.level,
     apps: task.summary.apps,
     startState: task.summary.startState,

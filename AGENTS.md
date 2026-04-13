@@ -203,20 +203,24 @@ These references should inform shell/app structure, spacing, and information hie
 
 ## Current Starter Tasks
 
-Current starter inventory: `25`
+Current starter inventory: `96`
 
 Starter task definitions live under:
 
 - `packages/core/src/tasks/starter/`
+- `packages/core/src/tasks/starter/browser-bulk-tasks.ts`
+- `packages/core/src/tasks/files-window-tasks.ts` (starter split 40개 포함)
 - starter entrypoint: `packages/core/src/tasks/starter/index.ts`
 
 ## Current Representative Tasks
 
-Current representative inventory: `23`
+Current representative inventory: `64`
 
 Representative task definitions live under:
 
 - `packages/core/src/tasks/representative/`
+- `packages/core/src/tasks/representative/browser-bulk-tasks.ts`
+- `packages/core/src/tasks/files-window-tasks.ts` (representative split 10개 포함)
 - representative entrypoint: `packages/core/src/tasks/representative/index.ts`
 
 For the full current task ID list, see `doc/task/task-hub.md`.

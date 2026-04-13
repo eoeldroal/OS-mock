@@ -120,6 +120,7 @@ const workflowMailBridge = getBrowserTask("workflow", "workflow_mail_bridge");
 const workflowTerminalCapture = getBrowserTask("workflow", "workflow_terminal_capture");
 const workflowHelpDigest = getBrowserTask("workflow", "workflow_help_digest");
 const thunderbirdMockNotes = getBrowserTask("thunderbird", "thunderbird_mock_notes");
+const thunderbirdPack = getBrowserTask("thunderbird", "thunderbird_task_pack");
 const chromeBookmarkCleanup = getBrowserTask("chrome", "chrome_bookmark_cleanup");
 const chromeHelpCapture = getBrowserTask("chrome", "chrome_help_capture");
 const terminalTask = findTask((task) => task.appRefs.includes("Terminal"));
@@ -725,6 +726,206 @@ export const REPRESENTATIVE_BROWSER_EXTENDED_TASKS: TaskSpec[] = [
     },
     goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
     progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_find_dual_app_mail_task_and_log_id",
+    instruction: "In Firefox OSWorld Explorer, find the Thunderbird task whose app list includes both Thunderbird and Firefox, write its task id into dual-app-mail.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      subtype: "task-find-thunderbird-firefox",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "dual-app-mail.txt is unopened in File Explorer while Firefox starts on a different task card.",
+      objective: "Use the task app list to identify the only Thunderbird task that also references Firefox, then save its id.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, find the Thunderbird task whose app list includes both Thunderbird and Firefox, write its task id into dual-app-mail.txt, and save.",
+        "thunderbird",
+        "thunderbird_task_pack",
+        "file-dual-app-mail",
+        "dual-app-mail.txt",
+        thunderbirdPack.id,
+        "",
+        false
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_compare_help_topics_and_log_restore_title",
+    instruction: "In Firefox Ubuntu help, compare Dock basics and Window controls, write the topic that mentions unsaved text staying intact into restore-topic.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      subtype: "help-compare-restore-intact",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "restore-topic.txt is already open while Firefox starts on Explorer with distractor files visible.",
+      objective: "Compare two help topics by their visible guidance, identify the one about unsaved text staying intact, and save its title.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildHelpTask(
+        viewport,
+        "In Firefox Ubuntu help, compare Dock basics and Window controls, write the topic that mentions unsaved text staying intact into restore-topic.txt, and save.",
+        "window-controls",
+        "file-restore-topic",
+        "restore-topic.txt",
+        windowControls.title
+      );
+    },
+    goalPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.help_topic_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_find_maildesk_firefox_task_and_log_heading",
+    instruction: "In Firefox OSWorld Explorer, find the Mail Desk task that also uses Firefox, record its card heading in mail-firefox-heading.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      subtype: "task-find-maildesk-firefox-heading",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "mail-firefox-heading.txt is unopened in File Explorer while Firefox starts on a different task card.",
+      objective: "Use owner and app metadata together to identify the requested Thunderbird card, then save its heading.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, find the Mail Desk task that also uses Firefox, record its card heading in mail-firefox-heading.txt, and save.",
+        "thunderbird",
+        "thunderbird_task_pack",
+        "file-mail-firefox-heading",
+        "mail-firefox-heading.txt",
+        thunderbirdPack.title,
+        "",
+        false
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_opened", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_compare_workflow_tasks_and_log_shared_level_label",
+    instruction: "In Firefox OSWorld Explorer, compare Bridge a Thunderbird summary into notes and Capture terminal output in notes, write their matching level label into workflow-common-level.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 72,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_compare_to_note",
+      subtype: "task-compare-shared-level-label",
+      level: "D",
+      apps: ["browser", "note", "files"],
+      startState: "workflow-common-level.txt is already open while Firefox starts on the Workflow category.",
+      objective: "Compare two workflow task cards, identify the matching level label they share, and save it in the open note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, compare Bridge a Thunderbird summary into notes and Capture terminal output in notes, write their matching level label into workflow-common-level.txt, and save.",
+        "workflow",
+        "workflow_terminal_capture",
+        "file-workflow-common-level",
+        "workflow-common-level.txt",
+        workflowMailBridge.difficulty
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_record_task_domain_owner_block",
+    instruction: "In Firefox OSWorld Explorer, select the Review the Ubuntu desktop task pack task, append its domain and owner block to pack-domain-owner.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_brief_to_note",
+      subtype: "task-domain-owner-block",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "pack-domain-owner.txt is already open with a heading while Firefox starts on a different task card.",
+      objective: "Select the requested Thunderbird task, append its domain and owner block, and save the note.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      return buildTaskTask(
+        viewport,
+        "In Firefox OSWorld Explorer, select the Review the Ubuntu desktop task pack task, append its domain and owner block to pack-domain-owner.txt, and save.",
+        "thunderbird",
+        "thunderbird_task_pack",
+        "file-pack-domain-owner",
+        "pack-domain-owner.txt",
+        "Domain: " + thunderbirdPack.domain + "\nOwner: " + thunderbirdPack.owner,
+        "Pack summary:\n",
+        true
+      );
+    },
+    goalPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.task_selected", "note.target_appended", "note.saved"],
+    forbiddenPredicates: []
+  },
+  {
+    id: "browser_bookmark_help_reminder_block_note",
+    instruction: "In Firefox, use the Ubuntu Docs bookmark, switch to Workflow notes, append the topic name and follow-up reminder to workflow-reminder-block.txt, and save.",
+    domain: "Chrome",
+    split: "representative",
+    maxSteps: 68,
+    seedDefaults: [0, 1, 2],
+    summary: {
+      family: "browser_help_extract_to_note",
+      subtype: "bookmark-help-reminder-block",
+      level: "C",
+      apps: ["browser", "note", "files"],
+      startState: "workflow-reminder-block.txt is unopened in File Explorer while Firefox starts on Explorer.",
+      objective: "Use the help bookmark, capture the workflow topic header and reminder block, open the note, and save it.",
+      implementationPath
+    },
+    setup(_seed, viewport) {
+      const built = buildHelpTask(
+        viewport,
+        "In Firefox, use the Ubuntu Docs bookmark, switch to Workflow notes, append the topic name and follow-up reminder to workflow-reminder-block.txt, and save.",
+        "workflow-notes",
+        "file-workflow-reminder-block",
+        "workflow-reminder-block.txt",
+        "Topic: " + workflowNotes.title + "\nReminder: " + workflowNotes.lines[1],
+        "",
+        false
+      );
+      return {
+        ...built,
+        targets: {
+          ...built.targets,
+          targetBookmarkId: "ubuntu-docs",
+          targetPage: "help"
+        }
+      };
+    },
+    goalPredicates: ["browser.bookmark_opened", "browser.help_topic_opened", "note.target_opened", "note.target_appended", "note.saved"],
+    progressPredicates: ["browser.bookmark_opened", "browser.help_topic_opened", "note.target_opened", "note.target_appended", "note.saved"],
     forbiddenPredicates: []
   }
 ];
