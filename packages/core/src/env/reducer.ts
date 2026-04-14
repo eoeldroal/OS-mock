@@ -1,51 +1,220 @@
-import { getFileExplorerLayout } from "../apps/file-explorer.js";
-import { getBrowserLiteLayout } from "../apps/browser-lite.js";
-import { getMailLiteLayout, getVisibleMailMessages } from "../apps/mail-lite.js";
+import { produce } from "immer";
+import { handleFileExplorerAction } from "../apps/file-explorer.js";
+import { handleBrowserAction } from "../apps/browser-lite.js";
+import { handleMailAction } from "../apps/mail-lite.js";
+import { handleNoteEditorAction } from "../apps/note-editor.js";
+import { handleTerminalAction } from "../apps/terminal-lite.js";
+import { executeCommand } from "../apps/terminal-commands.js";
+import { applyTerminalCommandResult, deleteFileWithCleanup } from "../system/state-utils.js";
 import {
-  getLineStartOffsets,
-  getLines,
-  getNoteEditorLayout,
-  NOTE_CHAR_WIDTH,
-  NOTE_LINE_HEIGHT
-} from "../apps/note-editor.js";
-import { getTerminalLiteLayout } from "../apps/terminal-lite.js";
+  createContextMenu,
+  getContextMenuBounds,
+  getContextMenuItemBounds,
+  getFileExplorerContextMenu,
+  getNoteEditorContextMenu,
+  getTerminalContextMenu,
+  getDesktopContextMenu
+} from "../system/context-menu.js";
 import type {
-  BrowserLiteState,
   Computer13Action,
   EnvState,
-  FileExplorerState,
-  MailLiteState,
-  NoteEditorState,
+  MouseButton,
   Point,
   Rect,
-  TerminalLiteState,
-  WindowInstance
+  ResizeEdge,
+  WindowInstance,
+  WindowResizeState
 } from "../types.js";
-import { addNoteEditorWindow, launchAppWindow } from "./factory.js";
-import { renameFile, updateFileContent } from "../system/filesystem.js";
+import { addNoteEditorWindow, GNOME_DOCK_WIDTH, GNOME_TOP_BAR_HEIGHT, launchAppWindow } from "./factory.js";
 import { pointInRect, clipPoint } from "../system/pointer.js";
 import {
   closeWindow,
   focusWindow,
   getFocusedWindowId,
   getPopupBounds,
+  getResizeEdge,
   getTaskbarItems,
   getTopmostWindowAtPoint,
   getWindowFrameControls,
   minimizeWindow,
+  raiseWindow,
   restoreWindow,
   toggleMaximizeWindow
 } from "../system/window-manager.js";
-import { setClipboardText } from "../system/clipboard.js";
+import { createFileEntry, createUniqueEntryName, getFileEntry, getOrderedFiles, getPlacePath, insertFileEntry } from "../system/filesystem.js";
+import { allocateEntityId } from "../system/entity-id.js";
 
 export type ReduceResult = {
   envState: EnvState;
   actionAccepted: boolean;
   focusChanged: boolean;
+  actionSummary: string;
 };
 
 function deepEqualEnv(left: EnvState, right: EnvState) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function windowStateChanged(previous: EnvState, next: EnvState) {
+  return previous.windows.some((window) => {
+    const updated = next.windows.find((candidate) => candidate.id === window.id);
+    return (
+      updated &&
+      (updated.minimized !== window.minimized ||
+        updated.maximized !== window.maximized ||
+        updated.bounds.x !== window.bounds.x ||
+        updated.bounds.y !== window.bounds.y ||
+        updated.bounds.width !== window.bounds.width ||
+        updated.bounds.height !== window.bounds.height)
+    );
+  });
+}
+
+function noteBufferChanged(previous: EnvState, next: EnvState) {
+  return Object.entries(previous.appStates.noteEditor).some(([id, note]) => {
+    const updated = next.appStates.noteEditor[id];
+    return updated && updated.buffer !== note.buffer;
+  });
+}
+
+function selectionChanged(previous: EnvState, next: EnvState) {
+  return (
+    Object.entries(previous.appStates.noteEditor).some(([id, note]) => {
+      const updated = next.appStates.noteEditor[id];
+      return (
+        updated &&
+        (updated.selectedLineIndex !== note.selectedLineIndex || updated.cursorIndex !== note.cursorIndex)
+      );
+    }) ||
+    Object.entries(previous.appStates.browserLite).some(([id, browser]) => {
+      const updated = next.appStates.browserLite[id];
+      return updated && updated.selectedHelpLineIndex !== browser.selectedHelpLineIndex;
+    }) ||
+    Object.entries(previous.appStates.terminalLite).some(([id, terminal]) => {
+      const updated = next.appStates.terminalLite[id];
+      return updated && updated.selectedLineIndex !== terminal.selectedLineIndex;
+    }) ||
+    Object.entries(previous.appStates.mailLite).some(([id, mail]) => {
+      const updated = next.appStates.mailLite[id];
+      return updated && updated.selectedPreviewLineIndex !== mail.selectedPreviewLineIndex;
+    })
+  );
+}
+
+function detectSpecificAppChange(previous: EnvState, next: EnvState): string | null {
+  for (const [id, browser] of Object.entries(previous.appStates.browserLite)) {
+    const updated = next.appStates.browserLite[id];
+    if (updated && (updated.currentPage !== browser.currentPage ||
+      updated.selectedCategoryId !== browser.selectedCategoryId ||
+      updated.selectedTaskId !== browser.selectedTaskId)) {
+      return "browser_navigation";
+    }
+  }
+  for (const [id, mail] of Object.entries(previous.appStates.mailLite)) {
+    const updated = next.appStates.mailLite[id];
+    if (updated && (updated.selectedFolder !== mail.selectedFolder ||
+      updated.selectedMessageId !== mail.selectedMessageId)) {
+      return "mail_selection";
+    }
+  }
+  for (const [id, explorer] of Object.entries(previous.appStates.fileExplorer)) {
+    const updated = next.appStates.fileExplorer[id];
+    if (updated && updated.selectedFileId !== explorer.selectedFileId) {
+      return "file_selection";
+    }
+  }
+  for (const [id, terminal] of Object.entries(previous.appStates.terminalLite)) {
+    const updated = next.appStates.terminalLite[id];
+    if (updated && updated.lastCommand !== terminal.lastCommand) {
+      return "command_ran";
+    }
+  }
+  return null;
+}
+
+function buildActionSummary(
+  previous: EnvState,
+  next: EnvState,
+  action: Computer13Action,
+  accepted: boolean,
+  focusChanged: boolean
+) {
+  const previousFiles = getOrderedFiles(previous.fileSystem);
+
+  if (action.type === "WAIT") {
+    return "wait";
+  }
+  if (action.type === "DONE") {
+    return "done";
+  }
+  if (action.type === "FAIL") {
+    return "fail";
+  }
+  if (!accepted) {
+    return "rejected";
+  }
+  if (previous.contextMenu && !next.contextMenu) {
+    return "context_menu_closed";
+  }
+  if (!previous.contextMenu && next.contextMenu) {
+    return "context_menu_opened";
+  }
+  if (previous.popups.length > next.popups.length) {
+    return "popup_dismissed";
+  }
+  if (previous.clipboard.text !== next.clipboard.text) {
+    return "clipboard_changed";
+  }
+  if (previous.windows.length < next.windows.length) {
+    return "window_opened";
+  }
+  if (previous.windows.length > next.windows.length) {
+    return "window_closed";
+  }
+  if (windowStateChanged(previous, next)) {
+    if (action.type === "DRAG_TO" || action.type === "DRAG") {
+      const maximizedChanged = previous.windows.some((w) => {
+        const updated = next.windows.find((candidate) => candidate.id === w.id);
+        return updated && updated.maximized !== w.maximized;
+      });
+      if (maximizedChanged) {
+        return "window_state_changed";
+      }
+      // Check if width/height changed (resize) vs just position (drag)
+      const sizeChanged = previous.windows.some((w) => {
+        const u = next.windows.find(c => c.id === w.id);
+        return u && (u.bounds.width !== w.bounds.width || u.bounds.height !== w.bounds.height);
+      });
+      return sizeChanged ? "window_resized" : "window_dragged";
+    }
+    return "window_state_changed";
+  }
+  const appChange = detectSpecificAppChange(previous, next);
+  if (appChange) {
+    return appChange;
+  }
+  if (selectionChanged(previous, next)) {
+    return "selection_changed";
+  }
+  if (noteBufferChanged(previous, next)) {
+    return action.type === "HOTKEY" ? "text_pasted" : "text_changed";
+  }
+  if (previousFiles.some((file) => {
+    const updated = getFileEntry(next.fileSystem, file.id);
+    return updated && updated.content !== file.content;
+  })) {
+    return "file_saved";
+  }
+  if (focusChanged) {
+    return "focus_changed";
+  }
+  if (action.type === "TYPING") {
+    return "text_changed";
+  }
+  if (action.type === "MOVE_TO" || action.type === "DRAG_TO" || action.type === "DRAG") {
+    return "pointer_moved";
+  }
+  return "action_applied";
 }
 
 function popupButtonBounds(state: EnvState): Rect {
@@ -58,18 +227,205 @@ function popupButtonBounds(state: EnvState): Rect {
   };
 }
 
-function syncWindowTitles(state: EnvState): EnvState {
-  const next = structuredClone(state);
-  next.windows = next.windows.map((window) => {
-    if (window.appId !== "note-editor") {
-      return window;
-    }
-    const note = next.appStates.noteEditor[window.id];
-    const file = next.fileSystem.files[note.fileId];
-    return {
-      ...window,
-      title: file?.name ?? window.title
+function isWindowFrameControlHit(window: WindowInstance, point: Point) {
+  const controls = getWindowFrameControls(window.bounds);
+  return (
+    pointInRect(point, controls.closeButtonBounds) ||
+    pointInRect(point, controls.minimizeButtonBounds) ||
+    pointInRect(point, controls.maximizeButtonBounds)
+  );
+}
+
+function clampWindowOrigin(state: EnvState, bounds: Rect, origin: Point): Point {
+  const minX = GNOME_DOCK_WIDTH + 12;
+  const minY = GNOME_TOP_BAR_HEIGHT + 12;
+  const maxX = Math.max(minX, state.viewport.width - bounds.width - 12);
+  const maxY = Math.max(minY, state.viewport.height - bounds.height - 12);
+  return {
+    x: Math.max(minX, Math.min(maxX, origin.x)),
+    y: Math.max(minY, Math.min(maxY, origin.y))
+  };
+}
+
+function beginWindowDrag(state: EnvState, point: Point, button: MouseButton) {
+  if (button !== "left" || state.popups.length > 0) {
+    return state;
+  }
+
+  const targetWindow = getTopmostWindowAtPoint(state, point);
+  if (!targetWindow || targetWindow.maximized) {
+    return state;
+  }
+
+  const controls = getWindowFrameControls(targetWindow.bounds);
+  if (!pointInRect(point, controls.titleBarBounds) || isWindowFrameControlHit(targetWindow, point)) {
+    return state;
+  }
+
+  const focused = focusWindow(state, targetWindow.id);
+  const raised = raiseWindow(focused, targetWindow.id);
+  const next = produce(raised, draft => {
+    draft.dragState = {
+      windowId: targetWindow.id,
+      pointerOffset: {
+        x: point.x - targetWindow.bounds.x,
+        y: point.y - targetWindow.bounds.y
+      }
     };
+  });
+  return next;
+}
+
+function updateDraggedWindow(state: EnvState, point: Point) {
+  if (!state.dragState || !state.pointer.buttonsPressed.includes("left")) {
+    return state;
+  }
+
+  const next = produce(state, draft => {
+    const draggedWindow = draft.windows.find((window) => window.id === draft.dragState?.windowId);
+    if (!draggedWindow || draggedWindow.minimized || draggedWindow.maximized) {
+      draft.dragState = undefined;
+      return;
+    }
+
+    if (draft.dragState) {
+      const nextOrigin = clampWindowOrigin(draft, draggedWindow.bounds, {
+        x: point.x - draft.dragState.pointerOffset.x,
+        y: point.y - draft.dragState.pointerOffset.y
+      });
+      draggedWindow.bounds = {
+        ...draggedWindow.bounds,
+        x: nextOrigin.x,
+        y: nextOrigin.y
+      };
+    }
+  });
+  return next;
+}
+
+function applyAtomicDrag(state: EnvState, start: Point, end: Point, button: MouseButton) {
+  let next = produce(state, draft => {
+    Object.assign(draft.pointer, start);
+    if (!draft.pointer.buttonsPressed.includes(button)) {
+      draft.pointer.buttonsPressed.push(button);
+    }
+  });
+
+  const resizeTarget = getTopmostWindowAtPoint(next, start);
+  if (resizeTarget && getResizeEdge(resizeTarget, start)) {
+    next = beginWindowResize(next, start, button);
+  } else {
+    next = beginWindowDrag(next, start, button);
+  }
+
+  next = produce(next, draft => {
+    Object.assign(draft.pointer, end);
+  });
+
+  if (next.resizeState) {
+    next = updateResizedWindow(next, end);
+  } else {
+    next = updateDraggedWindow(next, end);
+  }
+
+  next = applyWindowDragReleaseSnap(next, end, button);
+
+  return produce(next, draft => {
+    draft.pointer.buttonsPressed = draft.pointer.buttonsPressed.filter((pressed) => pressed !== button);
+    if (button === "left") {
+      draft.dragState = undefined;
+      draft.resizeState = undefined;
+    }
+  });
+}
+
+function applyWindowDragReleaseSnap(state: EnvState, point: Point, button: MouseButton) {
+  if (button !== "left" || !state.dragState) {
+    return state;
+  }
+
+  const draggedWindow = state.windows.find((window) => window.id === state.dragState?.windowId);
+  if (!draggedWindow || draggedWindow.minimized || draggedWindow.maximized) {
+    return state;
+  }
+
+  const topSnapThreshold = GNOME_TOP_BAR_HEIGHT + 16;
+  if (point.y <= topSnapThreshold) {
+    return toggleMaximizeWindow(state, draggedWindow.id);
+  }
+
+  return state;
+}
+
+const MIN_WINDOW_WIDTH = 200;
+const MIN_WINDOW_HEIGHT = 150;
+
+function beginWindowResize(state: EnvState, point: Point, button: MouseButton): EnvState {
+  if (button !== "left" || state.popups.length > 0) return state;
+
+  const targetWindow = getTopmostWindowAtPoint(state, point);
+  if (!targetWindow || targetWindow.maximized || targetWindow.minimized) return state;
+
+  const edge = getResizeEdge(targetWindow, point);
+  if (!edge) return state;
+
+  const focused = focusWindow(state, targetWindow.id);
+  const raised = raiseWindow(focused, targetWindow.id);
+  return produce(raised, draft => {
+    draft.resizeState = {
+      windowId: targetWindow.id,
+      edge,
+      initialBounds: { ...targetWindow.bounds },
+      initialPointer: { ...point }
+    };
+  });
+}
+
+function updateResizedWindow(state: EnvState, point: Point): EnvState {
+  if (!state.resizeState || !state.pointer.buttonsPressed.includes("left")) return state;
+
+  return produce(state, draft => {
+    const resize = draft.resizeState;
+    if (!resize) return;
+
+    const win = draft.windows.find(w => w.id === resize.windowId);
+    if (!win) { draft.resizeState = undefined; return; }
+
+    const dx = point.x - resize.initialPointer.x;
+    const dy = point.y - resize.initialPointer.y;
+    const ib = resize.initialBounds;
+
+    let newX = ib.x, newY = ib.y, newW = ib.width, newH = ib.height;
+
+    // Apply resize based on edge
+    if (resize.edge.includes("e")) newW = Math.max(MIN_WINDOW_WIDTH, ib.width + dx);
+    if (resize.edge.includes("w")) {
+      const proposedW = ib.width - dx;
+      if (proposedW >= MIN_WINDOW_WIDTH) { newX = ib.x + dx; newW = proposedW; }
+    }
+    if (resize.edge.includes("s")) newH = Math.max(MIN_WINDOW_HEIGHT, ib.height + dy);
+    if (resize.edge.includes("n")) {
+      const proposedH = ib.height - dy;
+      if (proposedH >= MIN_WINDOW_HEIGHT) { newY = ib.y + dy; newH = proposedH; }
+    }
+
+    win.bounds = { x: newX, y: newY, width: newW, height: newH };
+  });
+}
+
+function syncWindowTitles(state: EnvState): EnvState {
+  const next = produce(state, draft => {
+    draft.windows = draft.windows.map((window) => {
+      if (window.appId !== "note-editor") {
+        return window;
+      }
+      const note = draft.appStates.noteEditor[window.id];
+      const file = getFileEntry(draft.fileSystem, note.fileId);
+      return {
+        ...window,
+        title: file?.name ?? window.title
+      };
+    });
   });
   return next;
 }
@@ -89,10 +445,35 @@ function openOrFocusNoteEditor(state: EnvState, fileId: string, preferredId?: st
 
   const nextId = preferredId ?? `notes-${fileId}`;
   const noteCount = state.windows.filter((window) => window.appId === "note-editor").length;
-  const bounds =
-    noteCount === 0
-      ? { x: 420, y: 84, width: 390, height: 470 }
-      : { x: 830, y: 84, width: 390, height: 470 };
+  const noteWidth = noteCount === 0 ? 360 : 346;
+  const noteHeight = noteCount === 0 ? 400 : 400;
+  const top = 94;
+  const visibleWindows = state.windows
+    .filter((window) => !window.minimized && window.appId !== "note-editor")
+    .sort((left, right) => right.zIndex - left.zIndex);
+  const anchorWindow = visibleWindows[0];
+  const defaultCenteredX = Math.max(
+    92,
+    Math.round((state.viewport.width - noteWidth) / 2)
+  );
+
+  let x = defaultCenteredX;
+  if (anchorWindow) {
+    const rightCandidate = anchorWindow.bounds.x + anchorWindow.bounds.width + 16;
+    const leftCandidate = anchorWindow.bounds.x - noteWidth - 16;
+    const maxRight = state.viewport.width - noteWidth - 18;
+    const leftLimit = 84;
+
+    if (rightCandidate <= maxRight) {
+      x = rightCandidate;
+    } else if (leftCandidate >= leftLimit) {
+      x = leftCandidate;
+    } else {
+      x = Math.max(leftLimit, Math.min(maxRight, defaultCenteredX));
+    }
+  }
+
+  const bounds = { x, y: top, width: noteWidth, height: noteHeight };
 
   return addNoteEditorWindow(state, nextId, fileId, bounds, true);
 }
@@ -105,16 +486,165 @@ function handlePopupClick(state: EnvState, point: Point) {
   if (!pointInRect(point, buttonBounds)) {
     return { envState: state, accepted: false };
   }
-  const next = structuredClone(state);
-  next.popups.pop();
-  const fallback = next.windows
-    .filter((window) => !window.minimized)
-    .sort((left, right) => right.zIndex - left.zIndex)[0];
-  next.windows = next.windows.map((window) => ({
-    ...window,
-    focused: window.id === fallback?.id
-  }));
+  const next = produce(state, draft => {
+    draft.popups.pop();
+    const fallback = draft.windows
+      .filter((window) => !window.minimized)
+      .sort((left, right) => right.zIndex - left.zIndex)[0];
+    draft.windows = draft.windows.map((window) => ({
+      ...window,
+      focused: window.id === fallback?.id
+    }));
+  });
   return { envState: next, accepted: true };
+}
+
+function dismissContextMenu(state: EnvState): EnvState {
+  if (!state.contextMenu) {
+    return state;
+  }
+  return produce(state, draft => {
+    draft.contextMenu = undefined;
+  });
+}
+
+function handleContextMenuClick(state: EnvState, point: Point): { envState: EnvState; accepted: boolean; handled: boolean } {
+  if (!state.contextMenu) {
+    return { envState: state, accepted: false, handled: false };
+  }
+
+  // Check if click is on a menu item
+  for (let i = 0; i < state.contextMenu.items.length; i++) {
+    const itemBounds = getContextMenuItemBounds(state.contextMenu, i);
+    if (pointInRect(point, itemBounds)) {
+      const item = state.contextMenu.items[i];
+      if (!item.enabled) {
+        // Click on disabled item - just dismiss
+        return { envState: dismissContextMenu(state), accepted: true, handled: true };
+      }
+      // Execute the menu item action
+      const sourceWindowId = state.contextMenu.sourceWindowId;
+      const sourceWindow = sourceWindowId ? state.windows.find(w => w.id === sourceWindowId) : null;
+
+      let result = state;
+
+      if (item.id === "open" && sourceWindow?.appId === "file-explorer") {
+        // Open file - equivalent to double-click
+        const explorer = state.appStates.fileExplorer[sourceWindowId!];
+        if (explorer.selectedFileId) {
+          const file = getFileEntry(state.fileSystem, explorer.selectedFileId);
+          if (file?.kind === "folder") {
+            result = produce(state, draft => {
+              draft.appStates.fileExplorer[sourceWindowId!].currentDirectory = file.path;
+              draft.appStates.fileExplorer[sourceWindowId!].selectedFileId = undefined;
+            });
+          } else if (file) {
+            result = openOrFocusNoteEditor(state, explorer.selectedFileId);
+          }
+        }
+      } else if (item.id === "rename" && sourceWindow?.appId === "file-explorer") {
+        // Enter rename mode
+        const explorer = state.appStates.fileExplorer[sourceWindowId!];
+        if (explorer.selectedFileId) {
+          const file = getFileEntry(state.fileSystem, explorer.selectedFileId);
+          if (file) {
+            result = produce(state, draft => {
+              draft.appStates.fileExplorer[sourceWindowId!].renameMode = {
+                fileId: explorer.selectedFileId!,
+                draft: file.name,
+                replaceOnType: true
+              };
+            });
+          }
+        }
+      } else if (item.id === "delete" && sourceWindow?.appId === "file-explorer") {
+        // Delete file
+        const explorer = state.appStates.fileExplorer[sourceWindowId!];
+        if (explorer.selectedFileId) {
+          result = produce(deleteFileWithCleanup(state, explorer.selectedFileId), draft => {
+            draft.appStates.fileExplorer[sourceWindowId!].selectedFileId = undefined;
+          });
+        }
+      } else if (item.id === "new-file" || item.id === "new-folder") {
+        const explorerState =
+          sourceWindow?.appId === "file-explorer" ? state.appStates.fileExplorer[sourceWindowId!] : undefined;
+        const defaultBaseName = item.id === "new-folder" ? "New Folder" : "Untitled";
+        const defaultExtension = item.id === "new-folder" ? "" : ".txt";
+        const baseDir =
+          explorerState?.currentDirectory ??
+          getPlacePath(state.fileSystem, explorerState?.currentPlace ?? "Desktop");
+        const candidateName = createUniqueEntryName(state.fileSystem, baseDir, defaultBaseName, defaultExtension);
+        result = produce(state, draft => {
+          const newEntryId = allocateEntityId(draft, "file");
+          draft.fileSystem = insertFileEntry(
+            draft.fileSystem,
+            createFileEntry(
+              newEntryId,
+              candidateName,
+              "",
+              baseDir,
+              item.id === "new-folder" ? "folder" : "file"
+            )
+          );
+          if (sourceWindow?.appId === "file-explorer") {
+            draft.appStates.fileExplorer[sourceWindowId!].selectedFileId = newEntryId;
+            draft.appStates.fileExplorer[sourceWindowId!].renameMode = {
+              fileId: newEntryId,
+              draft: candidateName,
+              replaceOnType: true
+            };
+          }
+        });
+      } else if (item.id === "copy" && sourceWindow?.appId === "note-editor") {
+        // Copy selected text in note editor
+        const note = state.appStates.noteEditor[sourceWindowId!];
+        const lines = note.buffer.split("\n");
+        if (note.selectedLineIndex !== undefined && note.selectedLineIndex >= 0 && note.selectedLineIndex < lines.length) {
+          result = produce(state, draft => {
+            draft.clipboard.text = lines[note.selectedLineIndex!];
+          });
+        }
+      } else if (item.id === "paste" && sourceWindow?.appId === "note-editor") {
+        // Paste into note editor
+        const note = state.appStates.noteEditor[sourceWindowId!];
+        result = produce(state, draft => {
+          const text = draft.appStates.noteEditor[sourceWindowId!].buffer;
+          const textBefore = text.substring(0, note.cursorIndex);
+          const textAfter = text.substring(note.cursorIndex);
+          draft.appStates.noteEditor[sourceWindowId!].buffer = textBefore + state.clipboard.text + textAfter;
+          draft.appStates.noteEditor[sourceWindowId!].cursorIndex = note.cursorIndex + state.clipboard.text.length;
+          draft.appStates.noteEditor[sourceWindowId!].dirty = true;
+        });
+      } else if (item.id === "copy" && sourceWindow?.appId === "terminal-lite") {
+        // Copy from terminal
+        const terminal = state.appStates.terminalLite[sourceWindowId!];
+        if (terminal.selectedLineIndex !== undefined && terminal.selectedLineIndex >= 0 && terminal.selectedLineIndex < terminal.lines.length) {
+          result = produce(state, draft => {
+            draft.clipboard.text = terminal.lines[terminal.selectedLineIndex!];
+          });
+        }
+      } else if (item.id === "paste" && sourceWindow?.appId === "terminal-lite") {
+        // Paste into terminal
+        result = produce(state, draft => {
+          draft.appStates.terminalLite[sourceWindowId!].input += state.clipboard.text;
+        });
+      } else if (item.id === "clear" && sourceWindow?.appId === "terminal-lite") {
+        // Clear terminal
+        result = produce(state, draft => {
+          draft.appStates.terminalLite[sourceWindowId!].lines = [];
+          draft.appStates.terminalLite[sourceWindowId!].selectedLineIndex = undefined;
+        });
+      } else if (item.id === "open-terminal") {
+        // Launch terminal
+        result = launchAppWindow(state, "terminal-lite");
+      }
+
+      return { envState: dismissContextMenu(result), accepted: true, handled: true };
+    }
+  }
+
+  // Click outside menu items - just dismiss
+  return { envState: dismissContextMenu(state), accepted: true, handled: true };
 }
 
 function handleWindowFrameClick(state: EnvState, windowId: string, point: Point, isDoubleClick: boolean) {
@@ -150,7 +680,7 @@ function handleWindowFrameClick(state: EnvState, windowId: string, point: Point,
 
   if (pointInRect(point, controls.titleBarBounds)) {
     return {
-      envState: isDoubleClick ? toggleMaximizeWindow(state, windowId) : focusWindow(state, windowId),
+      envState: isDoubleClick ? toggleMaximizeWindow(state, windowId) : raiseWindow(focusWindow(state, windowId), windowId),
       accepted: true,
       handled: true
     };
@@ -171,487 +701,308 @@ function handleTaskbarActivation(state: EnvState, windowId: string, appId: strin
   return launchAppWindow(state, appId);
 }
 
-function handleFileExplorerClick(
+// NEW: App action dispatcher
+function dispatchToApp(
   state: EnvState,
   window: WindowInstance,
-  explorer: FileExplorerState,
-  point: Point,
-  isDoubleClick: boolean
-) {
-  const files = state.fileSystem.order.map((id) => state.fileSystem.files[id]).filter(Boolean);
-  const layout = getFileExplorerLayout(window.bounds, files.length);
-  const clickedIndex = layout.rows.findIndex((row) => pointInRect(point, row));
-  if (clickedIndex === -1) {
-    return { envState: state, accepted: false };
+  action: Computer13Action,
+  point: Point
+): { envState: EnvState; accepted: boolean } | null {
+  const appId = window.appId;
+
+  if (appId === "file-explorer") {
+    const explorer = state.appStates.fileExplorer[window.id];
+    const result = handleFileExplorerAction(state, window, explorer, action, point);
+    if (!result) return null;
+    return { envState: result.envState ?? state, accepted: result.accepted };
   }
 
-  const next = structuredClone(state);
-  const nextExplorer = next.appStates.fileExplorer[window.id];
-  const file = files[clickedIndex];
-  nextExplorer.selectedFileId = file.id;
-  if (isDoubleClick) {
-    return {
-      envState: openOrFocusNoteEditor(next, file.id, file.id === "file-todo" ? "notes-todo" : undefined),
-      accepted: true
-    };
-  }
-  return { envState: next, accepted: true };
-}
-
-function getCursorFromPoint(buffer: string, editorBounds: Rect, point: Point) {
-  const lines = getLines(buffer);
-  const lineOffsets = getLineStartOffsets(buffer);
-  const clampedLine = Math.max(
-    0,
-    Math.min(lines.length - 1, Math.floor((point.y - editorBounds.y) / NOTE_LINE_HEIGHT))
-  );
-  const line = lines[clampedLine] ?? "";
-  const rawColumn = Math.floor((point.x - editorBounds.x) / NOTE_CHAR_WIDTH);
-  const clampedColumn = Math.max(0, Math.min(line.length, rawColumn));
-  return {
-    selectedLineIndex: clampedLine,
-    cursorIndex: lineOffsets[clampedLine] + clampedColumn
-  };
-}
-
-function saveNote(state: EnvState, noteWindowId: string) {
-  const next = structuredClone(state);
-  const note = next.appStates.noteEditor[noteWindowId];
-  next.fileSystem = updateFileContent(next.fileSystem, note.fileId, note.buffer);
-  note.dirty = false;
-  return next;
-}
-
-function insertText(buffer: string, cursorIndex: number, text: string) {
-  return {
-    buffer: `${buffer.slice(0, cursorIndex)}${text}${buffer.slice(cursorIndex)}`,
-    cursorIndex: cursorIndex + text.length
-  };
-}
-
-function handleNoteEditorClick(state: EnvState, window: WindowInstance, note: NoteEditorState, point: Point) {
-  const layout = getNoteEditorLayout(window.bounds);
-  if (pointInRect(point, layout.saveButtonBounds)) {
-    return { envState: saveNote(state, window.id), accepted: true };
+  if (appId === "note-editor") {
+    const note = state.appStates.noteEditor[window.id];
+    const result = handleNoteEditorAction(state, window, note, action, point);
+    if (!result) return null;
+    return { envState: result.envState ?? state, accepted: result.accepted };
   }
 
-  if (!pointInRect(point, layout.editorBounds)) {
-    return { envState: state, accepted: false };
+  if (appId === "browser-lite") {
+    const browser = state.appStates.browserLite[window.id];
+    const result = handleBrowserAction(state, window, browser, action, point);
+    if (!result) return null;
+    return { envState: result.envState ?? state, accepted: result.accepted };
   }
 
-  const next = structuredClone(state);
-  const nextNote = next.appStates.noteEditor[window.id];
-  const cursor = getCursorFromPoint(nextNote.buffer, layout.editorBounds, point);
-  nextNote.cursorIndex = cursor.cursorIndex;
-  nextNote.selectedLineIndex = cursor.selectedLineIndex;
-  return { envState: next, accepted: true };
-}
-
-function setBrowserPage(browser: BrowserLiteState, page: "explorer" | "help") {
-  browser.currentPage = page;
-  browser.tabs = browser.tabs.map((tab, index) => ({
-    ...tab,
-    active: page === "explorer" ? index === 0 : index === 1
-  }));
-  if (page === "explorer") {
-    browser.pageTitle = "OSWorld Explorer";
-    browser.url = "https://os-world.github.io/explorer.html";
-    if (!browser.selectedCategoryId && browser.categories[0]) {
-      browser.selectedCategoryId = browser.categories[0].id;
-      browser.selectedTaskId = browser.categories[0].tasks[0]?.id ?? "";
-    }
-  } else {
-    browser.pageTitle = "Ubuntu help";
-    browser.url = "https://help.ubuntu.com/mock/osworld";
-  }
-}
-
-function handleBrowserClick(state: EnvState, window: WindowInstance, browser: BrowserLiteState, point: Point) {
-  const layout = getBrowserLiteLayout(window.bounds, browser);
-  const next = structuredClone(state);
-  const nextBrowser = next.appStates.browserLite[window.id];
-
-  const clickedTabIndex = layout.tabRects.findIndex((rect) => pointInRect(point, rect));
-  if (clickedTabIndex >= 0) {
-    setBrowserPage(nextBrowser, clickedTabIndex === 0 ? "explorer" : "help");
-    return { envState: next, accepted: true };
-  }
-
-  const clickedBookmarkIndex = layout.bookmarkRects.findIndex((rect) => pointInRect(point, rect));
-  if (clickedBookmarkIndex >= 0) {
-    const bookmark = nextBrowser.bookmarks[clickedBookmarkIndex];
-    if (bookmark === "OSWorld") {
-      setBrowserPage(nextBrowser, "explorer");
+  if (appId === "terminal-lite") {
+    const terminal = state.appStates.terminalLite[window.id];
+    // Special handling for Enter key -> run command
+    if (action.type === "PRESS" && action.key.toLowerCase() === "enter") {
+      const command = terminal.input.trim();
+      if (!command) {
+        const next = produce(state, draft => {
+          draft.appStates.terminalLite[window.id].input = "";
+        });
+        return { envState: next, accepted: true };
+      }
+      const cmdResult = executeCommand(command, {
+        cwd: terminal.cwd,
+        fileSystem: state.fileSystem
+      });
+      let next = applyTerminalCommandResult(state, window.id, command, cmdResult);
+      // Reset history index after executing command
+      next = produce(next, draft => {
+        draft.appStates.terminalLite[window.id].historyIndex = -1;
+      });
       return { envState: next, accepted: true };
     }
-    if (bookmark === "Ubuntu Docs") {
-      setBrowserPage(nextBrowser, "help");
-      return { envState: next, accepted: true };
-    }
+    const result = handleTerminalAction(state, window, terminal, action, point);
+    if (!result) return null;
+    return { envState: result.envState ?? state, accepted: result.accepted };
   }
 
-  if (nextBrowser.currentPage !== "explorer") {
-    return { envState: state, accepted: false };
+  if (appId === "mail-lite") {
+    const mail = state.appStates.mailLite[window.id];
+    const result = handleMailAction(state, window, mail, action, point);
+    if (!result) return null;
+    return { envState: result.envState ?? state, accepted: result.accepted };
   }
 
-  const clickedCategoryIndex = layout.categoryRects.findIndex((rect) => pointInRect(point, rect));
-  if (clickedCategoryIndex >= 0) {
-    const category = nextBrowser.categories[clickedCategoryIndex];
-    nextBrowser.selectedCategoryId = category.id;
-    nextBrowser.selectedTaskId = category.tasks[0]?.id ?? "";
-    return { envState: next, accepted: true };
-  }
-
-  const selectedCategory =
-    nextBrowser.categories.find((category) => category.id === nextBrowser.selectedCategoryId) ??
-    nextBrowser.categories[0];
-  const clickedTaskIndex = layout.taskRects.findIndex((rect) => pointInRect(point, rect));
-  if (clickedTaskIndex >= 0 && selectedCategory?.tasks[clickedTaskIndex]) {
-    nextBrowser.selectedTaskId = selectedCategory.tasks[clickedTaskIndex].id;
-    return { envState: next, accepted: true };
-  }
-
-  return { envState: state, accepted: false };
+  return null;
 }
 
-function runTerminalCommand(state: EnvState, windowId: string) {
-  const next = structuredClone(state);
-  const terminal = next.appStates.terminalLite[windowId];
-  const command = terminal.input.trim();
-  const promptPrefix = `${terminal.prompt}:~${terminal.cwd}$`;
-
-  if (!command) {
-    terminal.input = "";
-    return next;
-  }
-
-  const outputLines: string[] = [];
-  if (command === "pwd") {
-    outputLines.push(terminal.cwd);
-  } else if (command === "ls") {
-    outputLines.push(next.fileSystem.order.map((id) => next.fileSystem.files[id]?.name).filter(Boolean).join("  "));
-  } else if (command.startsWith("cat ")) {
-    const fileName = command.slice(4).trim();
-    const file = Object.values(next.fileSystem.files).find((entry) => entry.name === fileName);
-    if (file) {
-      outputLines.push(...file.content.split("\n"));
-    } else {
-      outputLines.push(`cat: ${fileName}: No such file`);
-    }
-  } else {
-    outputLines.push(`command not found: ${command}`);
-  }
-
-  terminal.lines.push(`${promptPrefix} ${command}`, ...outputLines);
-  terminal.lastCommand = command;
-  terminal.lastOutput = outputLines.join("\n");
-  terminal.executedCommands.push(command);
-  terminal.status = `ran ${command}`;
-  terminal.input = "";
-  return next;
-}
-
-function handleMailClick(state: EnvState, window: WindowInstance, mail: MailLiteState, point: Point) {
-  const layout = getMailLiteLayout(window.bounds, mail);
-  const next = structuredClone(state);
-  const nextMail = next.appStates.mailLite[window.id];
-
-  const clickedFolderIndex = layout.folderRects.findIndex((rect) => pointInRect(point, rect));
-  if (clickedFolderIndex >= 0) {
-    const folder = nextMail.folders[clickedFolderIndex];
-    nextMail.selectedFolder = folder.id;
-    const firstMessage = getVisibleMailMessages(nextMail)[0];
-    nextMail.selectedMessageId = firstMessage?.id ?? "";
-    nextMail.previewBody = firstMessage?.body ?? [];
-    return { envState: next, accepted: true };
-  }
-
-  const visibleMessages = getVisibleMailMessages(nextMail);
-  const clickedMessageIndex = layout.messageRects.findIndex((rect) => pointInRect(point, rect));
-  if (clickedMessageIndex >= 0 && visibleMessages[clickedMessageIndex]) {
-    const message = visibleMessages[clickedMessageIndex];
-    nextMail.selectedMessageId = message.id;
-    nextMail.previewBody = message.body;
-    return { envState: next, accepted: true };
-  }
-
-  return { envState: state, accepted: false };
-}
-
-function handleTyping(state: EnvState, text: string) {
-  if (state.popups.length > 0) {
-    return { envState: state, accepted: false };
-  }
-  const focusedWindow = state.windows.find((window) => window.focused);
-  if (!focusedWindow) {
-    return { envState: state, accepted: false };
-  }
-
-  if (focusedWindow.appId === "file-explorer") {
-    const next = structuredClone(state);
-    const explorer = next.appStates.fileExplorer[focusedWindow.id];
-    if (!explorer.renameMode) {
-      return { envState: state, accepted: false };
-    }
-    explorer.renameMode.draft = explorer.renameMode.replaceOnType
-      ? text
-      : `${explorer.renameMode.draft}${text}`;
-    explorer.renameMode.replaceOnType = false;
-    return { envState: next, accepted: true };
-  }
-
-  if (focusedWindow.appId === "terminal-lite") {
-    const next = structuredClone(state);
-    const terminal = next.appStates.terminalLite[focusedWindow.id];
-    terminal.input = `${terminal.input}${text.replace(/\r?\n/g, "")}`;
-    terminal.status = terminal.input ? "editing" : "idle";
-    return { envState: next, accepted: true };
-  }
-
-  if (focusedWindow.appId !== "note-editor") {
-    return { envState: state, accepted: false };
-  }
-
-  const next = structuredClone(state);
-  const note = next.appStates.noteEditor[focusedWindow.id];
-  const inserted = insertText(note.buffer, note.cursorIndex, text);
-  note.buffer = inserted.buffer;
-  note.cursorIndex = inserted.cursorIndex;
-  note.selectedLineIndex = undefined;
-  note.dirty = true;
-  return { envState: next, accepted: true };
-}
-
-function handlePress(state: EnvState, key: string) {
-  const lower = key.toLowerCase();
-  if (state.popups.length > 0 && (lower === "enter" || lower === "escape")) {
-    const result = handlePopupClick(state, { x: popupButtonBounds(state).x + 8, y: popupButtonBounds(state).y + 8 });
-    return { envState: result.envState, accepted: result.accepted };
-  }
-
-  const focusedWindow = state.windows.find((window) => window.focused);
-  if (!focusedWindow) {
-    return { envState: state, accepted: false };
-  }
-
-  if (focusedWindow.appId === "file-explorer") {
-    const next = structuredClone(state);
-    const explorer = next.appStates.fileExplorer[focusedWindow.id];
-    if (lower === "f2" && explorer.selectedFileId) {
-      const file = next.fileSystem.files[explorer.selectedFileId];
-      explorer.renameMode = {
-        fileId: explorer.selectedFileId,
-        draft: file.name,
-        replaceOnType: true
-      };
-      return { envState: next, accepted: true };
-    }
-
-    if (!explorer.renameMode) {
-      return { envState: state, accepted: false };
-    }
-
-    if (lower === "backspace") {
-      explorer.renameMode.draft = explorer.renameMode.draft.slice(0, -1);
-      explorer.renameMode.replaceOnType = false;
-      return { envState: next, accepted: true };
-    }
-
-    if (lower === "escape") {
-      explorer.renameMode = undefined;
-      return { envState: next, accepted: true };
-    }
-
-    if (lower === "enter") {
-      next.fileSystem = renameFile(next.fileSystem, explorer.renameMode.fileId, explorer.renameMode.draft);
-      explorer.renameMode = undefined;
-      return { envState: syncWindowTitles(next), accepted: true };
-    }
-
-    return { envState: state, accepted: false };
-  }
-
-  if (focusedWindow.appId === "terminal-lite") {
-    const next = structuredClone(state);
-    const terminal = next.appStates.terminalLite[focusedWindow.id];
-
-    if (lower === "backspace") {
-      terminal.input = terminal.input.slice(0, -1);
-      terminal.status = terminal.input ? "editing" : "idle";
-      return { envState: next, accepted: true };
-    }
-
-    if (lower === "escape") {
-      terminal.input = "";
-      terminal.status = "idle";
-      return { envState: next, accepted: true };
-    }
-
-    if (lower === "enter") {
-      return { envState: runTerminalCommand(next, focusedWindow.id), accepted: true };
-    }
-
-    return { envState: state, accepted: false };
-  }
-
-  if (focusedWindow.appId !== "note-editor") {
-    return { envState: state, accepted: false };
-  }
-
-  const next = structuredClone(state);
-  const note = next.appStates.noteEditor[focusedWindow.id];
-
-  if (lower === "backspace") {
-    if (note.cursorIndex <= 0) {
-      return { envState: state, accepted: false };
-    }
-    note.buffer = `${note.buffer.slice(0, note.cursorIndex - 1)}${note.buffer.slice(note.cursorIndex)}`;
-    note.cursorIndex -= 1;
-    note.selectedLineIndex = undefined;
-    note.dirty = true;
-    return { envState: next, accepted: true };
-  }
-
-  if (lower === "enter") {
-    const inserted = insertText(note.buffer, note.cursorIndex, "\n");
-    note.buffer = inserted.buffer;
-    note.cursorIndex = inserted.cursorIndex;
-    note.selectedLineIndex = undefined;
-    note.dirty = true;
-    return { envState: next, accepted: true };
-  }
-
-  if (lower === "escape") {
-    note.selectedLineIndex = undefined;
-    return { envState: next, accepted: true };
-  }
-
-  return { envState: state, accepted: false };
-}
-
-function handleHotkey(state: EnvState, keys: string[]) {
-  if (state.popups.length > 0) {
-    return { envState: state, accepted: false };
-  }
-  const normalized = keys.map((key) => key.toLowerCase()).sort();
-  const focusedWindow = state.windows.find((window) => window.focused);
-  if (!focusedWindow || focusedWindow.appId !== "note-editor") {
-    return { envState: state, accepted: false };
-  }
-
-  const next = structuredClone(state);
-  const note = next.appStates.noteEditor[focusedWindow.id];
-  if (normalized.includes("ctrl") && normalized.includes("s")) {
-    return { envState: saveNote(next, focusedWindow.id), accepted: true };
-  }
-
-  if (normalized.includes("ctrl") && normalized.includes("c")) {
-    const lines = getLines(note.buffer);
-    const selectedLine = lines[note.selectedLineIndex ?? 0] ?? "";
-    next.clipboard = setClipboardText(next.clipboard, selectedLine);
-    return { envState: next, accepted: true };
-  }
-
-  if (normalized.includes("ctrl") && normalized.includes("v")) {
-    const inserted = insertText(note.buffer, note.cursorIndex, next.clipboard.text);
-    note.buffer = inserted.buffer;
-    note.cursorIndex = inserted.cursorIndex;
-    note.selectedLineIndex = undefined;
-    note.dirty = true;
-    return { envState: next, accepted: true };
-  }
-
-  return { envState: state, accepted: false };
-}
-
+// The main reduceEnvState function
 export function reduceEnvState(envState: EnvState, action: Computer13Action): ReduceResult {
   const previousFocused = getFocusedWindowId(envState);
-  let next = structuredClone(envState);
+  const previousState = structuredClone(envState);  // Keep this one clone for buildActionSummary comparison
+  let next = envState;
   let accepted = true;
 
   switch (action.type) {
     case "MOVE_TO":
-      next.pointer = { ...next.pointer, ...clipPoint({ x: action.x, y: action.y }, next.viewport) };
+      next = produce(next, draft => {
+        Object.assign(draft.pointer, clipPoint({ x: action.x, y: action.y }, draft.viewport));
+      });
       break;
+
     case "MOUSE_DOWN":
-      if (!next.pointer.buttonsPressed.includes(action.button ?? "left")) {
-        next.pointer.buttonsPressed.push(action.button ?? "left");
+      next = produce(next, draft => {
+        if (!draft.pointer.buttonsPressed.includes(action.button ?? "left")) {
+          draft.pointer.buttonsPressed.push(action.button ?? "left");
+        }
+      });
+      // Try resize first, then drag
+      const resizeTarget = getTopmostWindowAtPoint(next, { x: next.pointer.x, y: next.pointer.y });
+      if (resizeTarget && getResizeEdge(resizeTarget, { x: next.pointer.x, y: next.pointer.y })) {
+        next = beginWindowResize(next, { x: next.pointer.x, y: next.pointer.y }, action.button ?? "left");
+      } else {
+        next = beginWindowDrag(next, { x: next.pointer.x, y: next.pointer.y }, action.button ?? "left");
       }
       break;
+
     case "MOUSE_UP":
-      next.pointer.buttonsPressed = next.pointer.buttonsPressed.filter(
-        (button) => button !== (action.button ?? "left")
-      );
+      next = applyWindowDragReleaseSnap(next, { x: next.pointer.x, y: next.pointer.y }, action.button ?? "left");
+      next = produce(next, draft => {
+        draft.pointer.buttonsPressed = draft.pointer.buttonsPressed.filter(
+          b => b !== (action.button ?? "left")
+        );
+        if ((action.button ?? "left") === "left") {
+          draft.dragState = undefined;
+          draft.resizeState = undefined;
+        }
+      });
       break;
+
     case "DRAG_TO":
-      next.pointer = { ...next.pointer, ...clipPoint({ x: action.x, y: action.y }, next.viewport) };
+      next = produce(next, draft => {
+        Object.assign(draft.pointer, clipPoint({ x: action.x, y: action.y }, draft.viewport));
+      });
+      if (next.resizeState) {
+        next = updateResizedWindow(next, { x: next.pointer.x, y: next.pointer.y });
+      } else {
+        next = updateDraggedWindow(next, { x: next.pointer.x, y: next.pointer.y });
+      }
       break;
-    case "SCROLL":
-      accepted = true;
+
+    case "DRAG": {
+      const button = action.button ?? "left";
+      const start = clipPoint({ x: action.x1, y: action.y1 }, next.viewport);
+      const end = clipPoint({ x: action.x2, y: action.y2 }, next.viewport);
+      next = applyAtomicDrag(next, start, end, button);
       break;
+    }
+
+    case "SCROLL": {
+      // Try app-specific scroll
+      const focusedWindow = next.windows.find(w => w.focused);
+      if (next.popups.length > 0 || !focusedWindow) {
+        accepted = false;
+        break;
+      }
+      const scrollResult = dispatchToApp(next, focusedWindow, action, next.pointer);
+      if (scrollResult) {
+        next = scrollResult.envState;
+        accepted = scrollResult.accepted;
+      } else {
+        accepted = true; // scroll with no handler = accepted but no-op
+      }
+      break;
+    }
+
     case "WAIT":
     case "DONE":
     case "FAIL":
       accepted = true;
       break;
+
     case "TYPING": {
-      const typingResult = handleTyping(next, action.text);
-      next = typingResult.envState;
-      accepted = typingResult.accepted;
-      break;
-    }
-    case "PRESS": {
-      const pressResult = handlePress(next, action.key);
-      next = pressResult.envState;
-      accepted = pressResult.accepted;
-      break;
-    }
-    case "HOTKEY": {
-      const hotkeyResult = handleHotkey(next, action.keys);
-      next = hotkeyResult.envState;
-      accepted = hotkeyResult.accepted;
-      break;
-    }
-    case "KEY_DOWN":
-      if (!next.keyboard.pressedKeys.includes(action.key.toLowerCase())) {
-        next.keyboard.pressedKeys.push(action.key.toLowerCase());
+      if (next.popups.length > 0) { accepted = false; break; }
+      const focusedWindow = next.windows.find(w => w.focused);
+      if (!focusedWindow) { accepted = false; break; }
+      const typingResult = dispatchToApp(next, focusedWindow, action, next.pointer);
+      if (typingResult) {
+        next = typingResult.envState;
+        accepted = typingResult.accepted;
+      } else {
+        // App doesn't handle typing — accept as no-op (like typing in a non-editable area)
+        accepted = true;
       }
       break;
-    case "KEY_UP":
-      next.keyboard.pressedKeys = next.keyboard.pressedKeys.filter((key) => key !== action.key.toLowerCase());
+    }
+
+    case "PRESS": {
+      // Context menu Escape handling
+      const lower = action.key.toLowerCase();
+      if (next.contextMenu && lower === "escape") {
+        next = dismissContextMenu(next);
+        accepted = true;
+        break;
+      }
+      // Popup Enter/Escape handling
+      if (next.popups.length > 0 && (lower === "enter" || lower === "escape")) {
+        const result = handlePopupClick(next, { x: popupButtonBounds(next).x + 8, y: popupButtonBounds(next).y + 8 });
+        next = result.envState;
+        accepted = result.accepted;
+        break;
+      }
+      const focusedWindow = next.windows.find(w => w.focused);
+      if (!focusedWindow) {
+        // No focused window: Escape always accepted, other keys rejected
+        accepted = lower === "escape";
+        break;
+      }
+      const pressResult = dispatchToApp(next, focusedWindow, action, next.pointer);
+      if (pressResult) {
+        next = pressResult.envState;
+        accepted = pressResult.accepted;
+        // After file-explorer PRESS Enter (rename commit), sync titles
+        if (focusedWindow.appId === "file-explorer" && lower === "enter" && accepted) {
+          next = syncWindowTitles(next);
+        }
+      } else {
+        // App doesn't handle this key — accept as no-op (like pressing unbound key)
+        accepted = true;
+      }
       break;
+    }
+
+    case "HOTKEY": {
+      if (next.popups.length > 0) { accepted = false; break; }
+      const focusedWindow = next.windows.find(w => w.focused);
+      if (!focusedWindow) { accepted = false; break; }
+      const hotkeyResult = dispatchToApp(next, focusedWindow, action, next.pointer);
+      if (hotkeyResult) {
+        next = hotkeyResult.envState;
+        accepted = hotkeyResult.accepted;
+      } else {
+        // App doesn't handle this hotkey — accept as no-op
+        accepted = true;
+      }
+      break;
+    }
+
+    case "KEY_DOWN":
+      next = produce(next, draft => {
+        if (!draft.keyboard.pressedKeys.includes(action.key.toLowerCase())) {
+          draft.keyboard.pressedKeys.push(action.key.toLowerCase());
+        }
+      });
+      break;
+
+    case "KEY_UP":
+      next = produce(next, draft => {
+        draft.keyboard.pressedKeys = draft.keyboard.pressedKeys.filter(k => k !== action.key.toLowerCase());
+      });
+      break;
+
     case "RIGHT_CLICK":
     case "DOUBLE_CLICK":
     case "CLICK": {
       const point = clipPoint(
-        {
-          x: action.x ?? next.pointer.x,
-          y: action.y ?? next.pointer.y
-        },
+        { x: action.x ?? next.pointer.x, y: action.y ?? next.pointer.y },
         next.viewport
       );
-      next.pointer = { ...next.pointer, ...point };
+      next = produce(next, draft => { Object.assign(draft.pointer, point); });
 
-      const popupResult = handlePopupClick(next, point);
+      // 0. Context Menu handling
+      if (next.contextMenu && (action.type === "CLICK" || action.type === "DOUBLE_CLICK")) {
+        const menuResult = handleContextMenuClick(next, point);
+        next = menuResult.envState;
+        accepted = menuResult.accepted;
+        break;
+      }
+
+      // Dismiss context menu on right-click (will open new one if applicable)
+      if (action.type === "RIGHT_CLICK" && next.contextMenu) {
+        next = dismissContextMenu(next);
+      }
+
+      // 1. Popup
       if (next.popups.length > 0) {
+        const popupResult = handlePopupClick(next, point);
         next = popupResult.envState;
         accepted = popupResult.accepted;
         break;
       }
 
-      const taskbarItem = getTaskbarItems(next).find((item) => pointInRect(point, item.bounds));
+      // 2. Taskbar
+      const taskbarItem = getTaskbarItems(next).find(item => pointInRect(point, item.bounds));
       if (taskbarItem) {
         next = handleTaskbarActivation(next, taskbarItem.windowId, taskbarItem.appId);
         accepted = true;
         break;
       }
 
+      // 3. Desktop icons (only if no window at this point)
       const targetWindow = getTopmostWindowAtPoint(next, point);
       if (!targetWindow) {
-        accepted = false;
+        if (action.type === "RIGHT_CLICK") {
+          next = produce(next, draft => {
+            draft.contextMenu = createContextMenu(getDesktopContextMenu(), point);
+          });
+          accepted = true;
+          break;
+        }
+        // Desktop icons (double-click to launch)
+        if (action.type === "DOUBLE_CLICK") {
+          const icon = next.desktopIcons.find(i => pointInRect(point, i.bounds));
+          if (icon && icon.appId) {
+            next = launchAppWindow(next, icon.appId);
+            accepted = true;
+            break;
+          }
+        }
+        // Single click on desktop icon - just accept (visual feedback in UI)
+        const clickedIcon = next.desktopIcons.find(i => pointInRect(point, i.bounds));
+        if (clickedIcon) {
+          accepted = true;
+          break;
+        }
+        // Click on empty desktop area: accept as desktop focus (like real Ubuntu)
+        accepted = true;
         break;
       }
 
+      // 4. Window targeting
+
+      // 5. Window frame controls
       const frameResult = handleWindowFrameClick(next, targetWindow.id, point, action.type === "DOUBLE_CLICK");
       if (frameResult.handled) {
         next = frameResult.envState;
@@ -659,58 +1010,87 @@ export function reduceEnvState(envState: EnvState, action: Computer13Action): Re
         break;
       }
 
+      // 6. RIGHT_CLICK: Create context menu or delegated context menu
+      if (action.type === "RIGHT_CLICK") {
+        const isContentArea = !pointInRect(point, getWindowFrameControls(targetWindow.bounds).titleBarBounds);
+        if (isContentArea) {
+          let contextMenuItems: ReturnType<typeof getFileExplorerContextMenu> = [];
+          if (targetWindow.appId === "file-explorer") {
+            const explorer = next.appStates.fileExplorer[targetWindow.id];
+            contextMenuItems = getFileExplorerContextMenu(!!explorer.selectedFileId);
+          } else if (targetWindow.appId === "note-editor") {
+            const note = next.appStates.noteEditor[targetWindow.id];
+            contextMenuItems = getNoteEditorContextMenu(note.selectedLineIndex !== undefined);
+          } else if (targetWindow.appId === "terminal-lite") {
+            const terminal = next.appStates.terminalLite[targetWindow.id];
+            contextMenuItems = getTerminalContextMenu(terminal.selectedLineIndex !== undefined);
+          } else {
+            contextMenuItems = [];
+          }
+
+          if (contextMenuItems.length > 0) {
+            next = produce(next, draft => {
+              draft.contextMenu = createContextMenu(contextMenuItems, point, targetWindow.id);
+            });
+            accepted = true;
+            break;
+          }
+        }
+      }
+
+      // 7. Focus + delegate to app
+      const wasFocused = targetWindow.focused;
       next = focusWindow(next, targetWindow.id);
-      if (targetWindow.appId === "file-explorer") {
-        const result = handleFileExplorerClick(
-          next,
-          next.windows.find((window) => window.id === targetWindow.id)!,
-          next.appStates.fileExplorer[targetWindow.id],
-          point,
-          action.type === "DOUBLE_CLICK"
-        );
-        next = result.envState;
-        accepted = true;
-      } else if (targetWindow.appId === "note-editor") {
-        const result = handleNoteEditorClick(
-          next,
-          next.windows.find((window) => window.id === targetWindow.id)!,
-          next.appStates.noteEditor[targetWindow.id],
-          point
-        );
-        next = result.envState;
-        accepted = true;
-      } else if (targetWindow.appId === "browser-lite") {
-        const result = handleBrowserClick(
-          next,
-          next.windows.find((window) => window.id === targetWindow.id)!,
-          next.appStates.browserLite[targetWindow.id],
-          point
-        );
-        next = result.envState;
-        accepted = true;
-      } else if (targetWindow.appId === "mail-lite") {
-        const result = handleMailClick(
-          next,
-          next.windows.find((window) => window.id === targetWindow.id)!,
-          next.appStates.mailLite[targetWindow.id],
-          point
-        );
-        next = result.envState;
-        accepted = true;
+      const focusAccepted = !wasFocused;
+
+      // Map DOUBLE_CLICK to CLICK with numClicks=2 for app handlers
+      const appAction = action.type === "DOUBLE_CLICK"
+        ? { ...action, type: "CLICK" as const, numClicks: 2 }
+        : action.type === "RIGHT_CLICK"
+        ? action
+        : action;
+
+      const appResult = dispatchToApp(
+        next,
+        next.windows.find(w => w.id === targetWindow.id)!,
+        appAction,
+        point
+      );
+
+      if (appResult) {
+        next = appResult.envState;
+        accepted = appResult.accepted || focusAccepted;
+        // After file-explorer double-click, open or focus the note editor
+        if (targetWindow.appId === "file-explorer" && action.type === "DOUBLE_CLICK" && accepted) {
+          const explorer = next.appStates.fileExplorer[targetWindow.id];
+          if (explorer.selectedFileId) {
+            const file = getFileEntry(next.fileSystem, explorer.selectedFileId);
+            if (file?.kind !== "folder") {
+              next = openOrFocusNoteEditor(
+                next,
+                explorer.selectedFileId,
+                explorer.selectedFileId === "file-todo" ? "notes-todo" : undefined
+              );
+            }
+          }
+        }
       } else {
-        accepted = true;
+        accepted = focusAccepted;
       }
       break;
     }
+
     default:
       accepted = false;
       break;
   }
 
   const focusChanged = previousFocused !== getFocusedWindowId(next);
+  const actionSummary = buildActionSummary(previousState, next, action, accepted, focusChanged);
   return {
     envState: next,
     actionAccepted: accepted && !deepEqualEnv(envState, next) ? true : accepted,
-    focusChanged
+    focusChanged,
+    actionSummary
   };
 }

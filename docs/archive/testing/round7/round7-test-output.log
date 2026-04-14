@@ -1,0 +1,212 @@
+===============================================
+EXTREME EDGE CASES - Terminal & File Operations
+===============================================
+
+Test 1: Empty echo
+[1] FAIL: Empty echo
+  command: ""
+  output: ""
+  validState: true
+
+Test 2: Echo with special chars
+[2] PASS: Echo with special chars
+  command: "echo \"hello > world\""
+  validState: true
+
+Test 3: Cat nonexistent file
+[3] PASS: Cat nonexistent file
+  command: "cat doesnotexist.txt"
+  validState: true
+
+Test 4: Rm nonexistent file
+[4] PASS: Rm nonexistent file
+  validState: true
+
+Test 5: Touch existing file
+[5] PASS: Touch existing file
+  fileCountBefore: 2
+  fileCountAfter: 2
+  validState: true
+
+Test 6: Wc on empty file
+[6] PASS: Wc on empty file
+  command: "wc emptyfile.txt"
+  validState: true
+
+Test 7: Head on file with fewer lines than requested
+[7] PASS: Head on short file
+  command: "head -n 100 shortfile.txt"
+  validState: true
+
+Test 8: Very long input
+[8] PASS: Very long input
+  inputLength: 507
+  validState: true
+
+Test 9: Multiple Enter presses with empty input
+[9] PASS: Multiple Enter presses
+  validState: true
+
+Test 10: Command execution sequence
+[10] PASS: Command execution sequence
+  expectedCommands: ["pwd","ls","pwd"]
+  executedCommands: ["pwd","ls","pwd"]
+  validState: true
+
+Test 11: Echo redirect to same file twice
+[11] FAIL: Echo redirect twice
+  fileExists: false
+  validState: true
+
+Test 12: Delete all files one by one
+[12] PASS: Delete all files
+  initialFileCount: 2
+  filesDeleted: 2
+  finalFileCount: 0
+  validState: true
+
+Test 13: Delete file open in note editor
+[13] FAIL: Delete file open in editor
+  Error: File was not created
+
+Test 14: Rename to empty string
+[14] PASS: Rename to empty string
+  validState: true
+
+Test 15: Rename with same name
+[15] PASS: Rename with same name
+  originalName: "scratch.txt"
+  stillExists: true
+  validState: true
+
+Test 16: Delete with no file selected
+[16] PASS: Delete with no selection
+  filesBefore: 2
+  filesAfter: 2
+  validState: true
+
+Test 17: Right-click on empty area
+[17] PASS: Right-click on empty area
+  actionAccepted: false
+  validState: true
+
+Test 18: Scroll in empty explorer
+[18] PASS: Scroll in empty explorer
+  validState: true
+
+Test 19: Select, close explorer, reopen
+[19] FAIL: Select, close, reopen explorer
+  explorerClosed: false
+  validState: true
+
+Test 20: Copy from terminal, paste in note
+[20] FAIL: Copy from terminal, paste in note
+  validState: true
+
+Test 21: Type in terminal while note is focused
+[21] PASS: Type in terminal with focus switching
+  validState: true
+
+Test 22: Open same file in two note editors
+[22] PASS: Open same file in two editors
+  validState: true
+
+Test 23: Save file, rename, open again
+[23] FAIL: Save, rename, open again
+  Error: Original file not created
+
+Test 24: Close all windows, try to type/click
+[24] PASS: Close all windows, try I/O
+  windowsClosedFrom: 4
+  windowsAfter: 4
+  validState: true
+
+
+===============================================
+TEST SUMMARY
+===============================================
+Total Tests: 24
+PASSED: 18
+FAILED: 6
+Success Rate: 75.00%
+
+--- Failed Tests ---
+[1] Empty echo
+[11] Echo redirect twice
+[13] Delete file open in editor
+    Error: File was not created
+[19] Select, close, reopen explorer
+[20] Copy from terminal, paste in note
+[23] Save, rename, open again
+    Error: Original file not created
+
+--- Detailed Results ---
+[1] Empty echo: FAIL
+      command: ""
+      output: ""
+      validState: true
+[2] Echo with special chars: PASS
+      command: "echo \"hello > world\""
+      validState: true
+[3] Cat nonexistent file: PASS
+      command: "cat doesnotexist.txt"
+      validState: true
+[4] Rm nonexistent file: PASS
+      validState: true
+[5] Touch existing file: PASS
+      fileCountBefore: 2
+      fileCountAfter: 2
+      validState: true
+[6] Wc on empty file: PASS
+      command: "wc emptyfile.txt"
+      validState: true
+[7] Head on short file: PASS
+      command: "head -n 100 shortfile.txt"
+      validState: true
+[8] Very long input: PASS
+      inputLength: 507
+      validState: true
+[9] Multiple Enter presses: PASS
+      validState: true
+[10] Command execution sequence: PASS
+      expectedCommands: ["pwd","ls","pwd"]
+      executedCommands: ["pwd","ls","pwd"]
+      validState: true
+[11] Echo redirect twice: FAIL
+      fileExists: false
+      validState: true
+[12] Delete all files: PASS
+      initialFileCount: 2
+      filesDeleted: 2
+      finalFileCount: 0
+      validState: true
+[13] Delete file open in editor: FAIL
+[14] Rename to empty string: PASS
+      validState: true
+[15] Rename with same name: PASS
+      originalName: "scratch.txt"
+      stillExists: true
+      validState: true
+[16] Delete with no selection: PASS
+      filesBefore: 2
+      filesAfter: 2
+      validState: true
+[17] Right-click on empty area: PASS
+      actionAccepted: false
+      validState: true
+[18] Scroll in empty explorer: PASS
+      validState: true
+[19] Select, close, reopen explorer: FAIL
+      explorerClosed: false
+      validState: true
+[20] Copy from terminal, paste in note: FAIL
+      validState: true
+[21] Type in terminal with focus switching: PASS
+      validState: true
+[22] Open same file in two editors: PASS
+      validState: true
+[23] Save, rename, open again: FAIL
+[24] Close all windows, try I/O: PASS
+      windowsClosedFrom: 4
+      windowsAfter: 4
+      validState: true

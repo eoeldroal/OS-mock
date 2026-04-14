@@ -1,5 +1,4 @@
 import browserIcon from "./assets/icon-browser.svg";
-import browserPageScreenshot from "./assets/osworld-explorer-page.png";
 import filesIcon from "./assets/icon-files.svg";
 import mailIcon from "./assets/icon-mail.svg";
 import terminalIcon from "./assets/icon-terminal.svg";
@@ -10,27 +9,27 @@ const APP_META: Record<string, { label: string; icon: string; accent: string }> 
   "file-explorer": {
     label: "Files",
     icon: filesIcon,
-    accent: "#f4a259"
+    accent: "#f6a15f"
   },
   "note-editor": {
     label: "Text Editor",
     icon: textEditorIcon,
-    accent: "#58a6ff"
+    accent: "#62a8ff"
   },
   "browser-lite": {
     label: "Firefox",
     icon: browserIcon,
-    accent: "#ff8f3d"
+    accent: "#f08b61"
   },
   "terminal-lite": {
     label: "Terminal",
     icon: terminalIcon,
-    accent: "#f97316"
+    accent: "#8ecb63"
   },
   "mail-lite": {
     label: "Thunderbird",
     icon: mailIcon,
-    accent: "#5fa8ff"
+    accent: "#79adff"
   }
 };
 
@@ -42,4 +41,4 @@ export function getAppMeta(appId: string) {
   };
 }
 
-export { browserPageScreenshot, ubuntuWallpaper };
+export { ubuntuWallpaper };

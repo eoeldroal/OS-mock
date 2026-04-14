@@ -28,3 +28,25 @@ export async function postViewerAction(sessionId: string, action: Computer13Acti
 
   return response.json();
 }
+
+export async function postBrowserContentAction(
+  sessionId: string,
+  windowId: string,
+  input:
+    | { kind: "click" | "double_click"; x: number; y: number }
+    | { kind: "scroll"; x: number; y: number; dx: number; dy: number }
+) {
+  const response = await fetch(`/api/sessions/${sessionId}/browser/${windowId}/input`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to apply browser input for session ${sessionId} window ${windowId}`);
+  }
+
+  return response.json();
+}

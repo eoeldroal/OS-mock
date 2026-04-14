@@ -1,0 +1,58 @@
+{
+  "name": "browser-help-visual-sequence",
+  "expectedLine": "Use the dock to switch between Files, Text Editor, Terminal, Firefox, and Thunderbird.",
+  "manualReview": {
+    "requestedLineVisibleAtStep": 1,
+    "noteTextVisibleAtStep": 3,
+    "noteSavedAtStep": 4
+  },
+  "reviewChecks": [
+    {
+      "label": "Requested line card does not overlap surrounding body text",
+      "stepIndex": 1,
+      "category": "text-overlap",
+      "expectation": "The requested line card is visually separated from nearby help copy and no text collisions are visible."
+    },
+    {
+      "label": "Typed note line is not clipped by the line gutter or save button area",
+      "stepIndex": 3,
+      "category": "text-overlap",
+      "expectation": "Typed note text remains readable in the editor body without overlapping the gutter, toolbar, or save affordance."
+    }
+  ],
+  "actions": [
+    {
+      "tool": "click",
+      "args": {
+        "x": 760,
+        "y": 134
+      }
+    },
+    {
+      "tool": "click",
+      "args": {
+        "x": 1070,
+        "y": 250
+      }
+    },
+    {
+      "tool": "type",
+      "args": {
+        "text": "Use the dock to switch between Files, Text Editor, Terminal, Firefox, and Thunderbird."
+      }
+    },
+    {
+      "tool": "hotkey",
+      "args": {
+        "keys": [
+          "Ctrl",
+          "S"
+        ]
+      }
+    },
+    {
+      "tool": "done",
+      "args": {}
+    }
+  ]
+}

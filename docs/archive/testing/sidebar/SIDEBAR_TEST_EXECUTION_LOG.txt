@@ -1,0 +1,319 @@
+================================================================================
+FILE EXPLORER SIDEBAR NAVIGATION TEST - EXECUTION LOG
+================================================================================
+
+Test Date:        March 10, 2026
+Test Script:      test-explorer-sidebar.mjs
+Task:             rename_note_in_explorer (seed 0)
+Environment:      MockOsEnv with 1280x800 viewport
+Browser:          Playwright Chromium (headless)
+Server:           Fastify on port 4321
+
+================================================================================
+TEST EXECUTION SUMMARY
+================================================================================
+
+Test Phases:
+  1. Environment initialization     ✓ PASS
+  2. Window detection              ✓ PASS
+  3. Sidebar layout calculation    ✓ PASS
+  4. Click detection (5 places)    ✓ PASS (5/5)
+  5. State verification            ✓ PASS (5/5)
+  6. Screenshot capture            ✓ PASS (5/5)
+  7. Report generation             ✓ PASS
+
+Total Execution Time: ~2 seconds
+
+================================================================================
+DETAILED RESULTS BY PLACE
+================================================================================
+
+Test 1: HOME
+─────────────────────────────────
+Click Center:          (180, 205)
+Action Accepted:       ✓ YES
+State Changed:         ✓ YES (currentPlace = "Home")
+Files:                 draft.txt, reference.txt (2 items)
+Screenshot:            00_home.png
+Status:                PASS (state OK, files not filtered)
+
+Test 2: DESKTOP
+─────────────────────────────────
+Click Center:          (180, 249)
+Action Accepted:       ✓ YES
+State Changed:         ✓ YES (currentPlace = "Desktop")
+Files:                 draft.txt, reference.txt (2 items)
+Screenshot:            01_desktop.png
+Status:                PASS (state OK, files not filtered)
+
+Test 3: DOCUMENTS
+─────────────────────────────────
+Click Center:          (180, 293)
+Action Accepted:       ✓ YES
+State Changed:         ✓ YES (currentPlace = "Documents")
+Files:                 draft.txt, reference.txt (2 items)
+Screenshot:            02_documents.png
+Status:                PASS (state OK, files not filtered)
+
+Test 4: DOWNLOADS
+─────────────────────────────────
+Click Center:          (180, 337)
+Action Accepted:       ✓ YES
+State Changed:         ✓ YES (currentPlace = "Downloads")
+Files:                 draft.txt, reference.txt (2 items)
+Screenshot:            03_downloads.png
+Status:                PASS (state OK, files not filtered)
+
+Test 5: WORKSPACE
+─────────────────────────────────
+Click Center:          (180, 381)
+Action Accepted:       ✓ YES
+State Changed:         ✓ YES (currentPlace = "workspace")
+Files:                 draft.txt, reference.txt (2 items)
+Screenshot:            04_workspace.png
+Status:                PASS (state OK, files not filtered)
+
+================================================================================
+OVERALL TEST RESULTS
+================================================================================
+
+Total Tests:           5
+Passed:                5
+Failed:                0
+Success Rate:          100%
+
+Component Status:
+  Click Detection:     ✓ PASS (5/5 accepted)
+  State Updates:       ✓ PASS (5/5 correct)
+  Coordinate Math:     ✓ PASS (100% accurate)
+  Visual Capture:      ✓ PASS (5/5 screenshots)
+  File Filtering:      ✗ FAIL (0/5 filtered)
+  
+Overall Assessment:    PARTIAL - Infrastructure OK, Feature Incomplete
+
+================================================================================
+SIDEBAR LAYOUT CALCULATIONS (VERIFIED CORRECT)
+================================================================================
+
+Window Bounds:       (92, 84, 340x430)
+Sidebar Width:       176px
+Sidebar Position:    x=106 (offset 14px from window left)
+Sidebar Top:         y=186 (offset 46px for header)
+
+Item Layout:
+┌────────────────────────────────────┐
+│ WINDOW HEADER (40px, y=84-124)     │
+├────────────────────────────────────┤
+│ PADDING (16px, y=124-140)          │
+├────────────────────────────────────┤
+│ "PLACES" LABEL (y=140-166)         │
+├────────────────────────────────────┤
+│ [0] Home (y=186-224, h=38)         │
+│ [gap 6px]                          │
+│ [1] Desktop (y=230-268, h=38)      │
+│ [gap 6px]                          │
+│ [2] Documents (y=274-312, h=38)    │
+│ [gap 6px]                          │
+│ [3] Downloads (y=318-356, h=38)    │
+│ [gap 6px]                          │
+│ [4] workspace (y=362-400, h=38)    │
+└────────────────────────────────────┘
+
+Click Centers Used:
+  Home:       (180, 205) = rect center (106,186 w148 h38)
+  Desktop:    (180, 249) = rect center (106,230 w148 h38)
+  Documents:  (180, 293) = rect center (106,274 w148 h38)
+  Downloads:  (180, 337) = rect center (106,318 w148 h38)
+  workspace:  (180, 381) = rect center (106,362 w148 h38)
+
+Status:              ✓ ALL COORDINATES VERIFIED CORRECT
+
+================================================================================
+VISUAL VERIFICATION NOTES
+================================================================================
+
+All 5 screenshots examined for:
+  1. Sidebar item highlighting/selection
+  2. File list display
+  3. Window positioning
+  4. Overall layout consistency
+
+Observations:
+  ✓ Sidebar items show visual selection change (background highlight)
+  ✓ File list displays with proper formatting
+  ✓ Windows positioned correctly in viewport
+  ✓ Layout consistent across all screenshots
+  ✗ File list content IDENTICAL across all places (no filtering)
+
+Critical Observation:
+  The sidebar UI DOES change visually when clicking different places
+  (the selected item becomes highlighted), but the CONTENT (file list)
+  does not change. This indicates the visual feedback mechanism works,
+  but the file filtering logic is missing.
+
+================================================================================
+CODE ANALYSIS FINDINGS
+================================================================================
+
+1. CLICK DETECTION - WORKING
+   File: packages/core/src/apps/file-explorer.ts (lines 97-111)
+   Status: ✓ PASS
+   Finding: Sidebar clicks are correctly detected and routed to handler
+   Evidence: All 5 clicks accepted, correct sidebar indices identified
+
+2. STATE MANAGEMENT - WORKING
+   File: packages/core/src/apps/file-explorer.ts (lines 261-269)
+   Status: ✓ PASS
+   Finding: currentPlace state is properly created and updated
+   Evidence: Each click changes currentPlace to expected value
+
+3. FILE FILTERING - NOT IMPLEMENTED
+   File: packages/core/src/apps/file-explorer.ts (lines 316-324)
+   Status: ✗ FAIL
+   Finding: buildViewModel does NOT filter files based on currentPlace
+   Evidence: Same files shown for all places
+   
+   Code Issue:
+   ```
+   buildViewModel(state, ctx: BuildContext) {
+     return {
+       currentPlace: state.currentPlace,          // ← Tracked
+       files: getOrderedFiles(ctx.envState.fileSystem)  // ← Ignores currentPlace
+     };
+   }
+   ```
+   
+   The currentPlace is available in the state but not used for filtering.
+
+4. FILE LOCATION METADATA - MISSING
+   File: packages/core/src/types.ts
+   Status: ✗ NOT IMPLEMENTED
+   Finding: FileEntry type has no location/place field
+   
+   Current FileEntry:
+   ```
+   {
+     id: string;
+     name: string;
+     path: string;     // Full path, not a place/location
+     content: string;
+   }
+   ```
+   
+   What's needed:
+   ```
+   {
+     location?: "Home" | "Desktop" | "Documents" | "Downloads" | "workspace";
+   }
+   ```
+
+5. FILE SYSTEM - NO PLACE AWARENESS
+   File: packages/core/src/system/filesystem.ts (line 13)
+   Status: ✗ NOT AWARE OF PLACES
+   Finding: getOrderedFiles() returns ALL files regardless of location
+   
+   The file system layer has no concept of places/locations.
+
+================================================================================
+ROOT CAUSE ANALYSIS
+================================================================================
+
+Why Files Don't Change When Selecting Different Places:
+
+The File Explorer sidebar was designed with two disconnected subsystems:
+
+System 1: UI State Management
+  - Tracks currentPlace (Home, Desktop, Documents, Downloads, workspace)
+  - Updates correctly when sidebar items are clicked
+  - Status: WORKING ✓
+
+System 2: File System Display
+  - Returns all files without filtering
+  - Has no awareness of places/locations
+  - Does not check currentPlace before displaying files
+  - Status: INCOMPLETE ✗
+
+The Two Systems Are NOT Connected:
+  - System 1 says "user selected Home"
+  - System 2 shows "all files"
+  - Result: User sees no change despite state change
+
+================================================================================
+WHAT WOULD FIX THIS
+================================================================================
+
+Three Changes Required:
+
+Change 1: Add location to FileEntry type
+  File: packages/core/src/types.ts
+  Add field: location?: "Home" | "Desktop" | ... (optional)
+
+Change 2: Filter files in buildViewModel
+  File: packages/core/src/apps/file-explorer.ts
+  In buildViewModel: Filter files by currentPlace before returning
+
+Change 3: Assign locations when creating files
+  File: packages/core/src/tasks/starter-tasks.ts
+  When calling createFile(): pass location parameter
+
+These three changes would complete the feature and make file filtering work.
+
+================================================================================
+OUTPUT FILES GENERATED
+================================================================================
+
+Main Report:
+  logs/agent-tests/sidebar-test/report.json     (2.0 KB)
+  logs/agent-tests/sidebar-test/ANALYSIS.md     (8.7 KB)
+  logs/agent-tests/sidebar-test/README.md       (6.5 KB)
+
+Screenshots:
+  logs/agent-tests/sidebar-test/00_home.png     (365 KB)
+  logs/agent-tests/sidebar-test/01_desktop.png  (365 KB)
+  logs/agent-tests/sidebar-test/02_documents.png (365 KB)
+  logs/agent-tests/sidebar-test/03_downloads.png (365 KB)
+  logs/agent-tests/sidebar-test/04_workspace.png (365 KB)
+
+Total Output: ~2.0 MB
+
+================================================================================
+CONCLUSION
+================================================================================
+
+TEST VERDICT: PASS with Critical Design Gap
+
+✓ Infrastructure Layer: WORKING
+  - Click detection works
+  - State management works
+  - Coordinate calculations correct
+  - Visual highlighting works
+
+✗ Feature Layer: INCOMPLETE
+  - File filtering not implemented
+  - No file list changes when place changes
+  - File location metadata missing
+  - User-facing behavior broken
+
+Grade: D (Infrastructure sound, feature incomplete)
+
+The test successfully identifies that sidebar navigation has solid infrastructure
+but is missing the critical file filtering implementation that would make it
+a complete user-facing feature.
+
+================================================================================
+HOW TO RUN THE TEST
+================================================================================
+
+From project root:
+  cd /sessions/sharp-clever-thompson/mnt/CoWork
+  node test-explorer-sidebar.mjs
+
+Expected output:
+  - Console output showing test progress
+  - 5 screenshots saved to logs/agent-tests/sidebar-test/
+  - report.json with test results
+  - ANALYSIS.md with detailed findings
+
+================================================================================
+END OF REPORT
+================================================================================

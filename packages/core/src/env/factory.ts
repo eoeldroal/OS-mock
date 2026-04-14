@@ -10,7 +10,14 @@ import type {
   Viewport,
   WindowInstance
 } from "../types.js";
+import { produce, setAutoFreeze } from "immer";
 import { nextZIndex } from "../system/window-manager.js";
+import { createEmptyFileSystemState, createFileEntry, getFileEntry, insertFileEntry } from "../system/filesystem.js";
+import { BROWSER_BOOKMARKS, BROWSER_HELP_TOPICS, BROWSER_TASK_CATEGORIES } from "../browser-fixtures.js";
+
+// Disable auto-freeze so task setup functions can mutate state returned by produce.
+// Freezing is a dev-time safety net; our reducer architecture already ensures immutability.
+setAutoFreeze(false);
 
 export const GNOME_TOP_BAR_HEIGHT = 32;
 export const GNOME_DOCK_WIDTH = 76;
@@ -20,18 +27,28 @@ export const DEFAULT_VIEWPORT: Viewport = {
   height: 800
 };
 
-export function createFile(id: string, name: string, content: string): FileEntry {
-  return {
+export function createFile(
+  id: string,
+  name: string,
+  content: string,
+  options?: {
+    directory?: string;
+    kind?: FileEntry["kind"];
+  }
+): FileEntry {
+  return createFileEntry(
     id,
     name,
     content,
-    path: `/workspace/${name}`
-  };
+    options?.directory,
+    options?.kind
+  );
 }
 
 export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvState {
   return {
     viewport,
+    nextEntityId: 1,
     pointer: {
       x: 120,
       y: 80,
@@ -40,14 +57,12 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
     keyboard: {
       pressedKeys: []
     },
+    dragState: undefined,
+    resizeState: undefined,
     clipboard: {
       text: ""
     },
-    fileSystem: {
-      cwd: "/workspace",
-      files: {},
-      order: []
-    },
+    fileSystem: createEmptyFileSystemState(),
     windows: [],
     appStates: {
       fileExplorer: {},
@@ -57,18 +72,55 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
       mailLite: {}
     },
     popups: [],
+    contextMenu: undefined,
     taskbarHeight: 48,
+    desktopIcons: [
+      {
+        id: "desktop-home",
+        label: "Home",
+        appId: "file-explorer",
+        position: { x: 100, y: 60 },
+        bounds: { x: 88, y: 44, width: 72, height: 72 }
+      },
+      {
+        id: "desktop-documents",
+        label: "Documents",
+        appId: "file-explorer",
+        position: { x: 100, y: 152 },
+        bounds: { x: 88, y: 136, width: 88, height: 72 }
+      },
+      {
+        id: "desktop-downloads",
+        label: "Downloads",
+        appId: "file-explorer",
+        position: { x: 100, y: 244 },
+        bounds: { x: 88, y: 228, width: 88, height: 72 }
+      },
+      {
+        id: "desktop-trash",
+        label: "Trash",
+        action: "open-trash",
+        position: { x: 100, y: 336 },
+        bounds: { x: 88, y: 320, width: 72, height: 72 }
+      },
+      {
+        id: "desktop-notes",
+        label: "notes.txt",
+        appId: "note-editor",
+        position: { x: 100, y: 428 },
+        bounds: { x: 88, y: 412, width: 88, height: 72 }
+      }
+    ],
     instruction
   };
 }
 
 export function addFiles(envState: EnvState, files: FileEntry[]) {
-  const next = structuredClone(envState);
-  for (const file of files) {
-    next.fileSystem.files[file.id] = file;
-    next.fileSystem.order.push(file.id);
-  }
-  return next;
+  return produce(envState, draft => {
+    for (const file of files) {
+      draft.fileSystem = insertFileEntry(draft.fileSystem, file);
+    }
+  });
 }
 
 export function createWindow(
@@ -102,18 +154,20 @@ export function addExplorerWindow(
   focused = true,
   minimized = false
 ) {
-  const next = structuredClone(envState);
-  if (focused) {
-    next.windows = next.windows.map((window) => ({ ...window, focused: false }));
-  }
-  next.windows.push(
-    createWindow(windowId, "file-explorer", "Files", bounds, nextZIndex(next), focused, minimized, false)
-  );
-  const explorerState: FileExplorerState = {
-    id: windowId
-  };
-  next.appStates.fileExplorer[windowId] = explorerState;
-  return next;
+  return produce(envState, draft => {
+    if (focused) {
+      draft.windows = draft.windows.map((window) => ({ ...window, focused: false }));
+    }
+    draft.windows.push(
+      createWindow(windowId, "file-explorer", "Files", bounds, nextZIndex(draft), focused, minimized, false)
+    );
+    const explorerState: FileExplorerState = {
+      id: windowId,
+      currentPlace: "workspace",
+      currentDirectory: draft.fileSystem.roots.workspace
+    };
+    draft.appStates.fileExplorer[windowId] = explorerState;
+  });
 }
 
 export function addNoteEditorWindow(
@@ -126,32 +180,34 @@ export function addNoteEditorWindow(
   dirty = false,
   minimized = false
 ) {
-  const next = structuredClone(envState);
-  if (focused) {
-    next.windows = next.windows.map((window) => ({ ...window, focused: false }));
-  }
-  const file = next.fileSystem.files[fileId];
-  next.windows.push(
-    createWindow(
-      windowId,
-      "note-editor",
-      file?.name ?? "Untitled",
-      bounds,
-      nextZIndex(next),
-      focused,
-      minimized,
-      false
-    )
-  );
-  const noteState: NoteEditorState = {
-    id: windowId,
-    fileId,
-    buffer: buffer ?? file?.content ?? "",
-    cursorIndex: (buffer ?? file?.content ?? "").length,
-    dirty
-  };
-  next.appStates.noteEditor[windowId] = noteState;
-  return next;
+  return produce(envState, draft => {
+    if (focused) {
+      draft.windows = draft.windows.map((window) => ({ ...window, focused: false }));
+    }
+    const file = getFileEntry(draft.fileSystem, fileId);
+    draft.windows.push(
+      createWindow(
+        windowId,
+        "note-editor",
+        file?.name ?? "Untitled",
+        bounds,
+        nextZIndex(draft),
+        focused,
+        minimized,
+        false
+      )
+    );
+    const noteState: NoteEditorState = {
+      id: windowId,
+      fileId,
+      buffer: buffer ?? file?.content ?? "",
+      cursorIndex: (buffer ?? file?.content ?? "").length,
+      dirty,
+      undoStack: [],
+      redoStack: []
+    };
+    draft.appStates.noteEditor[windowId] = noteState;
+  });
 }
 
 export function addBrowserWindow(
@@ -161,125 +217,48 @@ export function addBrowserWindow(
   focused = false,
   minimized = true
 ) {
-  const next = structuredClone(envState);
-  if (focused) {
-    next.windows = next.windows.map((window) => ({ ...window, focused: false }));
-  }
-  next.windows.push(
-    createWindow(
-      windowId,
-      "browser-lite",
-      "Mozilla Firefox",
-      bounds,
-      nextZIndex(next),
-      focused,
-      minimized,
-      false
-    )
-  );
-  const browserState: BrowserLiteState = {
-    id: windowId,
-    appName: "Mozilla Firefox",
-    url: "https://os-world.github.io/explorer.html",
-    pageTitle: "OSWorld Explorer",
-    currentPage: "explorer",
-    tabs: [
-      { id: `${windowId}-tab-1`, title: "OSWorld Explorer", active: true },
-      { id: `${windowId}-tab-2`, title: "Ubuntu help", active: false }
-    ],
-    bookmarks: ["Downloads", "OSWorld", "Ubuntu Docs", "Research Board"],
-    categories: [
-      {
-        id: "workflow",
-        label: "Workflow",
-        tasks: [
-          {
-            id: "workflow_mail_bridge",
-            domain: "Workflow",
-            title: "Bridge a Thunderbird summary into notes",
-            instruction: "Review a Thunderbird summary and record the task id in a local note.",
-            actions: ["Open Firefox", "Select Workflow", "Inspect task card", "Log task id into a note"]
-          },
-          {
-            id: "workflow_terminal_capture",
-            domain: "Workflow",
-            title: "Capture terminal output in notes",
-            instruction: "Run a short terminal command and store its output in a text note.",
-            actions: ["Open Terminal", "Run pwd", "Open note", "Save output"]
-          }
-        ]
-      },
-      {
-        id: "os",
-        label: "OS",
-        tasks: [
-          {
-            id: "os_restore_window",
-            domain: "OS",
-            title: "Restore a minimized editor",
-            instruction: "Bring a minimized editor window back from the dock and save the pending work.",
-            actions: ["Inspect dock", "Restore window", "Save file"]
-          },
-          {
-            id: "os_popup_dismissal",
-            domain: "OS",
-            title: "Dismiss a blocking popup",
-            instruction: "Clear a modal popup before interacting with the desktop again.",
-            actions: ["Find popup", "Dismiss dialog", "Resume task"]
-          }
-        ]
-      },
-      {
-        id: "chrome",
-        label: "Chrome",
-        tasks: [
-          {
-            id: "chrome_explorer_review",
-            domain: "Chrome",
-            title: "Review the OSWorld Explorer board",
-            instruction: "Open the explorer board and inspect a browser-oriented task card.",
-            actions: ["Open browser", "Navigate board", "Inspect visible task details"]
-          },
-          {
-            id: "chrome_help_capture",
-            domain: "Chrome",
-            title: "Capture the Ubuntu help reminder",
-            instruction: "Switch to the Ubuntu help tab and record the dock reminder line in a note.",
-            actions: ["Switch tab", "Read reminder line", "Save line into a note"]
-          }
-        ]
-      },
-      {
-        id: "thunderbird",
-        label: "Thunderbird",
-        tasks: [
-          {
-            id: "thunderbird_mock_notes",
-            domain: "Thunderbird",
-            title: "Capture the mock environment reminder",
-            instruction: "Open the Mock environment notes message and copy its reminder into a note.",
-            actions: ["Open Thunderbird", "Select message", "Copy reminder text", "Save note"]
-          },
-          {
-            id: "thunderbird_task_pack",
-            domain: "Thunderbird",
-            title: "Review the Ubuntu desktop task pack",
-            instruction: "Open the Ubuntu desktop task pack message and review its workflow coverage.",
-            actions: ["Open inbox", "Select task pack message", "Read preview"]
-          }
-        ]
-      }
-    ],
-    selectedCategoryId: "workflow",
-    selectedTaskId: "workflow_mail_bridge",
-    helpLines: [
-      "Ubuntu help",
-      "Use the dock to switch between Files, Text Editor, Terminal, Firefox, and Thunderbird.",
-      "Representative OSWorld-style tasks often span browser, mail, terminal, and file workflows."
-    ]
-  };
-  next.appStates.browserLite[windowId] = browserState;
-  return next;
+  return produce(envState, draft => {
+    if (focused) {
+      draft.windows = draft.windows.map((window) => ({ ...window, focused: false }));
+    }
+    draft.windows.push(
+      createWindow(
+        windowId,
+        "browser-lite",
+        "Mozilla Firefox",
+        bounds,
+        nextZIndex(draft),
+        focused,
+        minimized,
+        false
+      )
+    );
+    const browserState: BrowserLiteState = {
+      id: windowId,
+      appName: "Mozilla Firefox",
+      renderMode: "hybrid",
+      url: "https://www.google.com",
+      addressInput: "https://www.google.com",
+      addressBarFocused: false,
+      addressReplaceOnType: false,
+      pageTitle: "Google",
+      currentPage: "external",
+      tabs: [
+        { id: `${windowId}-tab-1`, title: "Google", active: true },
+        { id: `${windowId}-tab-2`, title: "Task Board", active: false }
+      ],
+      bookmarks: structuredClone(BROWSER_BOOKMARKS),
+      categories: structuredClone(BROWSER_TASK_CATEGORIES),
+      selectedCategoryId: "",
+      selectedTaskId: "",
+      helpTopics: structuredClone(BROWSER_HELP_TOPICS),
+      selectedHelpTopicId: BROWSER_HELP_TOPICS[0]?.id ?? "",
+      helpLines: [...(BROWSER_HELP_TOPICS[0]?.lines ?? [])],
+      lastOpenedBookmarkId: undefined,
+      selectedHelpLineIndex: undefined
+    };
+    draft.appStates.browserLite[windowId] = browserState;
+  });
 }
 
 export function addTerminalWindow(
@@ -289,38 +268,37 @@ export function addTerminalWindow(
   focused = false,
   minimized = true
 ) {
-  const next = structuredClone(envState);
-  if (focused) {
-    next.windows = next.windows.map((window) => ({ ...window, focused: false }));
-  }
-  next.windows.push(
-    createWindow(
-      windowId,
-      "terminal-lite",
-      "Terminal",
-      bounds,
-      nextZIndex(next),
-      focused,
-      minimized,
-      false
-    )
-  );
-  const terminalState: TerminalLiteState = {
-    id: windowId,
-    cwd: "/workspace",
-    prompt: "baghyeonbin@ubuntu",
-    status: "idle",
-    lines: [
-      "Welcome to Ubuntu Terminal",
-      "Supported commands: pwd, ls, cat <file>"
-    ],
-    input: "",
-    lastCommand: "",
-    lastOutput: "",
-    executedCommands: []
-  };
-  next.appStates.terminalLite[windowId] = terminalState;
-  return next;
+  return produce(envState, draft => {
+    if (focused) {
+      draft.windows = draft.windows.map((window) => ({ ...window, focused: false }));
+    }
+    draft.windows.push(
+      createWindow(
+        windowId,
+        "terminal-lite",
+        "Terminal",
+        bounds,
+        nextZIndex(draft),
+        focused,
+        minimized,
+        false
+      )
+    );
+    const terminalState: TerminalLiteState = {
+      id: windowId,
+      cwd: draft.fileSystem.cwd,
+      prompt: "baghyeonbin@ubuntu",
+      status: "idle",
+      lines: [],
+      input: "",
+      lastCommand: "",
+      lastOutput: "",
+      executedCommands: [],
+      historyIndex: -1,
+      selectedLineIndex: undefined
+    };
+    draft.appStates.terminalLite[windowId] = terminalState;
+  });
 }
 
 export function addMailWindow(
@@ -330,66 +308,67 @@ export function addMailWindow(
   focused = false,
   minimized = true
 ) {
-  const next = structuredClone(envState);
-  if (focused) {
-    next.windows = next.windows.map((window) => ({ ...window, focused: false }));
-  }
-  next.windows.push(
-    createWindow(
-      windowId,
-      "mail-lite",
-      "Thunderbird",
-      bounds,
-      nextZIndex(next),
-      focused,
-      minimized,
-      false
-    )
-  );
-  const mailState: MailLiteState = {
-    id: windowId,
-    selectedFolder: "inbox",
-    folders: [
-      { id: "inbox", name: "Inbox", unread: 3 },
-      { id: "drafts", name: "Drafts", unread: 1 },
-      { id: "sent", name: "Sent", unread: 0 },
-      { id: "archive", name: "Archive", unread: 0 }
-    ],
-    messages: [
-      {
-        id: "msg-1",
-        folderId: "inbox",
-        sender: "OSWorld Team",
-        subject: "Ubuntu desktop task pack",
-        preview: "Review browser, mail, terminal, and files workflow coverage.",
-        body: [
-          "Hi team,",
-          "Review browser, mail, terminal, and files workflow coverage.",
-          "This task pack mirrors representative OSWorld desktop scenarios."
-        ]
-      },
-      {
-        id: "msg-2",
-        folderId: "inbox",
-        sender: "Research Ops",
-        subject: "Mock environment notes",
-        preview: "Remember to test perturbations while the viewer is open.",
-        body: [
-          "Hi team,",
-          "Remember to test perturbations while the viewer is open.",
-          "Please keep the viewer and a11y tree aligned while validating tasks."
-        ]
-      }
-    ],
-    selectedMessageId: "msg-1",
-    previewBody: [
-      "Hi team,",
-      "Review browser, mail, terminal, and files workflow coverage.",
-      "This task pack mirrors representative OSWorld desktop scenarios."
-    ]
-  };
-  next.appStates.mailLite[windowId] = mailState;
-  return next;
+  return produce(envState, draft => {
+    if (focused) {
+      draft.windows = draft.windows.map((window) => ({ ...window, focused: false }));
+    }
+    draft.windows.push(
+      createWindow(
+        windowId,
+        "mail-lite",
+        "Thunderbird",
+        bounds,
+        nextZIndex(draft),
+        focused,
+        minimized,
+        false
+      )
+    );
+    const mailState: MailLiteState = {
+      id: windowId,
+      selectedFolder: "inbox",
+      folders: [
+        { id: "inbox", name: "Inbox", unread: 3 },
+        { id: "drafts", name: "Drafts", unread: 1 },
+        { id: "sent", name: "Sent", unread: 0 },
+        { id: "archive", name: "Archive", unread: 0 }
+      ],
+      messages: [
+        {
+          id: "msg-1",
+          folderId: "inbox",
+          sender: "Desktop Team",
+          subject: "Ubuntu desktop task pack",
+          preview: "Review browser, mail, terminal, and files workflow coverage.",
+          body: [
+            "Hi team,",
+            "Review browser, mail, terminal, and files workflow coverage.",
+            "This task pack covers representative desktop scenarios."
+          ]
+        },
+        {
+          id: "msg-2",
+          folderId: "inbox",
+          sender: "Research Ops",
+          subject: "Workspace notes",
+          preview: "Remember to test perturbations while the viewer is open.",
+          body: [
+            "Hi team,",
+            "Remember to test perturbations while the viewer is open.",
+            "Please keep the viewer and a11y tree aligned while validating tasks."
+          ]
+        }
+      ],
+      selectedMessageId: "msg-1",
+      previewBody: [
+        "Hi team,",
+        "Review browser, mail, terminal, and files workflow coverage.",
+        "This task pack mirrors representative OSWorld desktop scenarios."
+      ],
+      selectedPreviewLineIndex: undefined
+    };
+    draft.appStates.mailLite[windowId] = mailState;
+  });
 }
 
 export function launchAppWindow(envState: EnvState, appId: string) {
@@ -397,7 +376,7 @@ export function launchAppWindow(envState: EnvState, appId: string) {
     return addExplorerWindow(
       envState,
       "explorer-main",
-      { x: 84, y: 82, width: 340, height: 446 },
+      { x: 84, y: 82, width: 388, height: 460 },
       true,
       false
     );
@@ -407,7 +386,7 @@ export function launchAppWindow(envState: EnvState, appId: string) {
     return addBrowserWindow(
       envState,
       "browser-main",
-      { x: 440, y: 82, width: 550, height: 360 },
+      { x: 492, y: 82, width: 760, height: 420 },
       true,
       false
     );
@@ -427,7 +406,7 @@ export function launchAppWindow(envState: EnvState, appId: string) {
     return addMailWindow(
       envState,
       "mail-main",
-      { x: 1000, y: 82, width: 280, height: 420 },
+      { x: 792, y: 82, width: 460, height: 460 },
       true,
       false
     );

@@ -47,14 +47,15 @@ export function registerTrainerTools(server: McpServer, host: HostApp) {
   server.registerTool(
     "trainer.reset",
     {
-      description: "Reset a session to a deterministic task and seed.",
+      description: "Reset a session to a deterministic task and seed. Set maxSteps to 0 for unlimited steps (no truncation).",
       inputSchema: {
         sessionId: z.string(),
         taskId: z.string(),
-        seed: z.number()
+        seed: z.number(),
+        maxSteps: z.number().optional().describe("Override task maxSteps. 0 = unlimited (no truncation).")
       }
     },
-    async ({ sessionId, taskId, seed }) => jsonResponse(await host.reset(sessionId, taskId, seed))
+    async ({ sessionId, taskId, seed, maxSteps }) => jsonResponse(await host.reset(sessionId, taskId, seed, maxSteps))
   );
 
   server.registerTool(

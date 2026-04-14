@@ -1,7 +1,8 @@
-import type { EnvState, Point, Rect, TaskbarItem, WindowInstance } from "../types.js";
+import type { EnvState, Point, Rect, ResizeEdge, TaskbarItem, WindowInstance } from "../types.js";
 import { pointInRect } from "./pointer.js";
 
 export const WINDOW_FRAME_HEADER_HEIGHT = 40;
+export const RESIZE_HANDLE_SIZE = 8; // pixels from edge that count as resize handle
 const PINNED_APP_IDS = ["file-explorer", "browser-lite", "terminal-lite", "mail-lite"] as const;
 
 export function getWindowFrameControls(bounds: Rect) {
@@ -50,12 +51,36 @@ export function nextZIndex(state: EnvState): number {
 }
 
 export function focusWindow(state: EnvState, windowId: string): EnvState {
+  const target = state.windows.find((window) => window.id === windowId);
+  if (!target || target.focused) {
+    return state;
+  }
   const windows = cloneWindows(state.windows).map((window) => ({
     ...window,
     focused: window.id === windowId,
     zIndex: window.id === windowId ? nextZIndex(state) : window.zIndex
   }));
   return { ...state, windows };
+}
+
+export function raiseWindow(state: EnvState, windowId: string): EnvState {
+  const target = state.windows.find((window) => window.id === windowId);
+  if (!target) {
+    return state;
+  }
+
+  const highestZIndex = state.windows.reduce((max, window) => Math.max(max, window.zIndex), 0);
+  if (target.zIndex === highestZIndex) {
+    return state;
+  }
+
+  return {
+    ...state,
+    windows: cloneWindows(state.windows).map((window) => ({
+      ...window,
+      zIndex: window.id === windowId ? highestZIndex + 1 : window.zIndex
+    }))
+  };
 }
 
 export function minimizeAllWindows(state: EnvState): EnvState {
@@ -123,7 +148,7 @@ export function toggleMaximizeWindow(state: EnvState, windowId: string): EnvStat
 
     return {
       ...window,
-      restoredBounds: { ...window.bounds },
+      restoredBounds: window.restoredBounds ? { ...window.restoredBounds } : { ...window.bounds },
       bounds: viewportBounds,
       maximized: true,
       minimized: false
@@ -138,8 +163,23 @@ export function closeWindow(state: EnvState, windowId: string): EnvState {
   const fallback = windows
     .filter((window) => !window.minimized)
     .sort((left, right) => right.zIndex - left.zIndex)[0];
+
+  // Clean up orphaned app states for the closed window
+  const appStates = { ...state.appStates };
+  for (const key of Object.keys(appStates) as Array<keyof typeof appStates>) {
+    const bucket = appStates[key] as Record<string, unknown>;
+    if (windowId in bucket) {
+      const clone = { ...bucket };
+      delete clone[windowId];
+      (appStates as Record<string, unknown>)[key] = clone;
+    }
+  }
+
   return {
     ...state,
+    appStates,
+    // Clear dragState if the closed window was being dragged
+    dragState: state.dragState?.windowId === windowId ? undefined : state.dragState,
     windows: windows.map((window) => ({
       ...window,
       focused: window.id === fallback?.id
@@ -224,4 +264,36 @@ export function getPopupBounds(viewport: { width: number; height: number }): Rec
     width: 420,
     height: 240
   };
+}
+
+export function getResizeEdge(window: WindowInstance, point: Point): ResizeEdge | null {
+  if (window.minimized || window.maximized) return null;
+
+  const { x, y, width, height } = window.bounds;
+  const r = RESIZE_HANDLE_SIZE;
+
+  // Must be within window bounds + handle tolerance
+  if (point.x < x - r || point.x > x + width + r ||
+      point.y < y - r || point.y > y + height + r) {
+    return null;
+  }
+
+  const onLeft = point.x >= x - r && point.x <= x + r;
+  const onRight = point.x >= x + width - r && point.x <= x + width + r;
+  const onTop = point.y >= y - r && point.y <= y + r;
+  const onBottom = point.y >= y + height - r && point.y <= y + height + r;
+
+  // Corners first (more specific)
+  if (onTop && onLeft) return "nw";
+  if (onTop && onRight) return "ne";
+  if (onBottom && onLeft) return "sw";
+  if (onBottom && onRight) return "se";
+
+  // Edges
+  if (onTop) return "n";
+  if (onBottom) return "s";
+  if (onLeft) return "w";
+  if (onRight) return "e";
+
+  return null;
 }

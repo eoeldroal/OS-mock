@@ -5,13 +5,49 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #120d1f;
+  background:
+    radial-gradient(circle at 16% 10%, rgba(227, 116, 46, 0.12), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(96, 74, 176, 0.18), transparent 22%),
+    linear-gradient(180deg, #1c1028 0%, #160d21 34%, #130b1c 100%);
+}
+
+:root {
+  --shell-topbar-bg: rgba(28, 17, 39, 0.92);
+  --shell-topbar-border: rgba(255, 255, 255, 0.05);
+  --shell-topbar-text: #f3eef5;
+  --shell-topbar-muted: rgba(243, 238, 245, 0.68);
+  --shell-dock-bg: rgba(29, 19, 37, 0.86);
+  --shell-dock-border: rgba(255, 255, 255, 0.05);
+  --shell-dock-shadow: 0 24px 40px rgba(8, 5, 12, 0.38);
+  --shell-window-shadow: 0 20px 48px rgba(11, 8, 16, 0.26);
+  --shell-window-shadow-unfocused: 0 14px 28px rgba(11, 8, 16, 0.16);
+  --shell-yaru-orange: #e95420;
+  --shell-yaru-orange-soft: #f08b61;
+  --shell-yaru-purple: #4e2a71;
+  --shell-yaru-ink: #2f2438;
+  --shell-yaru-stone: #f1ece8;
+  --shell-yaru-surface: #f7f4f1;
+  --shell-headerbar-bg: linear-gradient(180deg, #ece5de 0%, #e7ded5 100%);
+  --shell-headerbar-bg-unfocused: linear-gradient(180deg, #dfd5cd 0%, #d8cdc4 100%);
+  --shell-headerbar-border: rgba(74, 57, 84, 0.14);
+  --shell-headerbar-text: #413547;
+  --shell-headerbar-dark-bg: linear-gradient(180deg, #31273a 0%, #2d2436 100%);
+  --shell-headerbar-dark-bg-unfocused: linear-gradient(180deg, #3a3043 0%, #342b3d 100%);
+  --shell-headerbar-dark-text: #f5eff4;
 }
 
 body {
   font-family: "Ubuntu", system-ui, sans-serif;
+  color: var(--shell-topbar-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
   box-sizing: border-box;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }

@@ -7,6 +7,7 @@ export const COMPUTER_13_ACTION_TYPES: Computer13ActionType[] = [
   "MOUSE_UP",
   "RIGHT_CLICK",
   "DOUBLE_CLICK",
+  "DRAG",
   "DRAG_TO",
   "SCROLL",
   "TYPING",
@@ -40,4 +41,3 @@ export const COMPUTER_13_SCHEMA = {
   actionTypes: COMPUTER_13_ACTION_TYPES,
   keys: COMPUTER_13_KEYS
 };
-

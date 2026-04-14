@@ -5,8 +5,10 @@ import {
   noteEditorPlugin,
   terminalLitePlugin
 } from "../apps/index.js";
+import { createObservation } from "../observation/index.js";
 import type { A11yNode, EnvState, Observation, RenderModel, TaskSpec, WindowViewModel } from "../types.js";
 import { getPopupBounds, getTaskbarItems, getWindowFrameControls } from "../system/window-manager.js";
+import { getContextMenuBounds, getContextMenuItemBounds } from "../system/context-menu.js";
 
 function buildPopupA11y(state: EnvState): A11yNode[] {
   return state.popups.map((popup) => {
@@ -43,7 +45,41 @@ function buildPopupA11y(state: EnvState): A11yNode[] {
   });
 }
 
-export function buildRenderModel(state: EnvState, stepIndex: number): RenderModel {
+function buildContextMenuA11y(state: EnvState): A11yNode[] {
+  if (!state.contextMenu) {
+    return [];
+  }
+
+  const menu = state.contextMenu;
+  const menuBounds = getContextMenuBounds(menu);
+  const menuItems = menu.items.map((item, index) => ({
+    id: `context-menu-item-${index}`,
+    role: "menuitem" as const,
+    name: item.label,
+    bounds: getContextMenuItemBounds(menu, index),
+    visible: true,
+    enabled: item.enabled,
+    focusable: true,
+    focused: menu.selectedIndex === index,
+    children: []
+  }));
+
+  return [
+    {
+      id: "context-menu",
+      role: "menu",
+      name: "Context Menu",
+      bounds: menuBounds,
+      visible: true,
+      enabled: true,
+      focusable: false,
+      focused: false,
+      children: menuItems
+    }
+  ];
+}
+
+export function buildRenderModel(state: EnvState, stepIndex: number, task?: TaskSpec): RenderModel {
   const windows: WindowViewModel[] = state.windows
     .map((window) => {
       const controls = getWindowFrameControls(window.bounds);
@@ -108,6 +144,8 @@ export function buildRenderModel(state: EnvState, stepIndex: number): RenderMode
     shellName: "Ubuntu 24.04 LTS",
     topBarTitle: "Activities",
     topBarClock: "Mon 11:24",
+    taskLoaded: Boolean(task),
+    taskId: task?.id,
     windows,
     popups: state.popups.map((popup) => ({
       id: popup.id,
@@ -117,10 +155,15 @@ export function buildRenderModel(state: EnvState, stepIndex: number): RenderMode
       bounds: getPopupBounds(state.viewport)
     })),
     taskbarItems: getTaskbarItems(state),
+    desktopIcons: state.desktopIcons,
     pointer: state.pointer,
     focusedWindowId:
       state.popups[state.popups.length - 1]?.id ?? state.windows.find((window) => window.focused)?.id,
-    instruction: state.instruction,
+    contextMenu: state.contextMenu ? {
+      items: state.contextMenu.items,
+      position: state.contextMenu.position,
+      bounds: getContextMenuBounds(state.contextMenu)
+    } : undefined,
     stepIndex
   };
 }
@@ -270,6 +313,18 @@ export function buildA11yTree(state: EnvState): A11yNode[] {
     }))
   };
 
+  const desktopIconNodes: A11yNode[] = state.desktopIcons.map(icon => ({
+    id: icon.id,
+    role: "icon" as const,
+    name: icon.label,
+    bounds: icon.bounds,
+    visible: true,
+    enabled: true,
+    focusable: true,
+    focused: false,
+    children: []
+  }));
+
   return [
     {
       id: "desktop",
@@ -285,7 +340,7 @@ export function buildA11yTree(state: EnvState): A11yNode[] {
       enabled: true,
       focusable: false,
       focused: false,
-      children: [topBarNode, taskbarNode, ...windowNodes, ...buildPopupA11y(state)]
+      children: [topBarNode, taskbarNode, ...desktopIconNodes, ...windowNodes, ...buildPopupA11y(state), ...buildContextMenuA11y(state)]
     }
   ];
 }
@@ -296,7 +351,7 @@ export function buildObservation(
   task?: TaskSpec,
   extras?: { screenshotPath?: string; viewerUrl?: string }
 ): Observation {
-  return {
+  return createObservation({
     viewport: state.viewport,
     screenshotPath: extras?.screenshotPath,
     viewerUrl: extras?.viewerUrl,
@@ -304,5 +359,5 @@ export function buildObservation(
     focusedWindowId:
       state.popups[state.popups.length - 1]?.id ?? state.windows.find((window) => window.focused)?.id,
     a11yTree: buildA11yTree(state)
-  };
+  });
 }

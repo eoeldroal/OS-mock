@@ -9,6 +9,11 @@ tmp/os-mock/
 .DS_Store
 output/
 tmp/
+.claude/
+.playwright-cli/
+logs/
+packages/web/packages/
+packages/web/vite.config.ts.timestamp-*
 results_step_1_m2sapo/
 results_steps_1_20_m2sapo/
 *.pdf

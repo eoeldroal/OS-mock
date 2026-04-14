@@ -1,0 +1,18 @@
+{
+  "name": "files-narrow-overlap-probe",
+  "reviewChecks": [
+    {
+      "label": "Filename column remains readable in narrow Files view",
+      "stepIndex": 0,
+      "category": "text-overlap",
+      "expectation": "Filenames such as draft.txt and reference.txt are individually readable and do not visually collide with the Modified column."
+    },
+    {
+      "label": "Sidebar labels remain separated from icons and selection pill",
+      "stepIndex": 0,
+      "category": "text-overlap",
+      "expectation": "Places labels stay legible without crowding icons or the active selection styling."
+    }
+  ],
+  "actions": []
+}

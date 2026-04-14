@@ -1,9 +1,10 @@
 import { COMPUTER_13_SCHEMA } from "../action-space.js";
+import { finalizeObservation } from "../observation/index.js";
 import { applyPerturbation, listPerturbations } from "./perturbations.js";
 import { buildObservation, buildRenderModel } from "./observation.js";
 import { reduceEnvState } from "./reducer.js";
 import { evaluateTaskState } from "./evaluator.js";
-import { DEFAULT_VIEWPORT } from "./factory.js";
+import { createEmptyEnv, DEFAULT_VIEWPORT } from "./factory.js";
 import { getTaskSpec, listTasks, sampleTask, type TaskSplit } from "../tasks/registry.js";
 import type {
   Computer13Action,
@@ -19,7 +20,8 @@ function createEmptyInfo() {
   return {
     lastProgress: [],
     lastViolations: [],
-    focusChanged: false
+    focusChanged: false,
+    actionSummary: "observe"
   };
 }
 
@@ -36,23 +38,7 @@ export class MockOsEnv {
   private snapshots = new Map<string, SessionSnapshot>();
 
   constructor(private readonly viewport: Viewport = DEFAULT_VIEWPORT) {
-    this.envState = {
-      viewport,
-      pointer: { x: 120, y: 80, buttonsPressed: [] },
-      keyboard: { pressedKeys: [] },
-      clipboard: { text: "" },
-      fileSystem: { cwd: "/workspace", files: {}, order: [] },
-      windows: [],
-      appStates: {
-        fileExplorer: {},
-        noteEditor: {},
-        browserLite: {},
-        terminalLite: {},
-        mailLite: {}
-      },
-      popups: [],
-      taskbarHeight: 48
-    };
+    this.envState = createEmptyEnv(viewport);
     this.targets = {};
   }
 
@@ -72,7 +58,7 @@ export class MockOsEnv {
   }
 
   getRenderModel(): RenderModel {
-    return buildRenderModel(this.envState, this.stepIndex);
+    return buildRenderModel(this.envState, this.stepIndex, this.currentTask);
   }
 
   getHiddenState() {
@@ -104,13 +90,19 @@ export class MockOsEnv {
       cumulativeReward: this.cumulativeReward,
       terminated: this.terminated,
       truncated: this.truncated,
-      observation: buildObservation(this.envState, this.stepIndex, this.currentTask, extras),
+      observation: finalizeObservation(
+        buildObservation(this.envState, this.stepIndex, this.currentTask, extras)
+      ),
       info: createEmptyInfo()
     };
   }
 
-  reset(opts: { taskId: string; seed: number }): StepResult {
+  reset(opts: { taskId: string; seed: number; maxSteps?: number }): StepResult {
     this.currentTask = getTaskSpec(opts.taskId);
+    if (opts.maxSteps !== undefined) {
+      // Override task's maxSteps. 0 means unlimited (no truncation).
+      this.currentTask = { ...this.currentTask, maxSteps: opts.maxSteps };
+    }
     this.seed = opts.seed;
     const setup = this.currentTask.setup(opts.seed, this.viewport);
     this.envState = structuredClone(setup.envState);
@@ -125,7 +117,7 @@ export class MockOsEnv {
     return this.observe();
   }
 
-  sampleTask(seed = Date.now(), split: TaskSplit = "all") {
+  sampleTask(seed = 0, split: TaskSplit = "all") {
     return sampleTask(seed, split);
   }
 
@@ -200,7 +192,8 @@ export class MockOsEnv {
       reward -= 0.25;
     }
 
-    if (this.stepIndex >= this.currentTask.maxSteps && !this.terminated) {
+    // maxSteps === 0 means unlimited (no truncation)
+    if (this.currentTask.maxSteps > 0 && this.stepIndex >= this.currentTask.maxSteps && !this.terminated) {
       this.truncated = true;
     }
 
@@ -218,11 +211,14 @@ export class MockOsEnv {
       cumulativeReward: this.cumulativeReward,
       terminated: this.terminated,
       truncated: this.truncated,
-      observation: buildObservation(this.envState, this.stepIndex, this.currentTask),
+      observation: finalizeObservation(
+        buildObservation(this.envState, this.stepIndex, this.currentTask)
+      ),
       info: {
         lastProgress: evaluation.progress,
         lastViolations: evaluation.violations,
-        focusChanged: reduced.focusChanged
+        focusChanged: reduced.focusChanged,
+        actionSummary: reduced.actionSummary
       }
     };
   }

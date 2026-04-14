@@ -1,4 +1,5 @@
 import type { EnvState } from "../types.js";
+import { produce } from "immer";
 import { createPopup } from "../system/popup-manager.js";
 import { clipPoint } from "../system/pointer.js";
 import { closeWindow, minimizeAllWindows } from "../system/window-manager.js";
@@ -11,16 +12,16 @@ export interface PerturbationOp {
 const popupInject: PerturbationOp = {
   id: "PopupInject",
   apply(state, params) {
-    const next = structuredClone(state);
-    next.popups.push(
-      createPopup(
-        String(params?.id ?? `popup-${next.popups.length + 1}`),
-        String(params?.title ?? "Attention required"),
-        String(params?.message ?? "A perturbation popup has appeared.")
-      )
-    );
-    next.windows = next.windows.map((window) => ({ ...window, focused: false }));
-    return next;
+    return produce(state, draft => {
+      draft.popups.push(
+        createPopup(
+          String(params?.id ?? `popup-${draft.popups.length + 1}`),
+          String(params?.title ?? "Attention required"),
+          String(params?.message ?? "A perturbation popup has appeared.")
+        )
+      );
+      draft.windows = draft.windows.map((window) => ({ ...window, focused: false }));
+    });
   }
 };
 
@@ -63,14 +64,14 @@ const windowClose: PerturbationOp = {
 const zOrderShuffle: PerturbationOp = {
   id: "ZOrderShuffle",
   apply(state) {
-    const next = structuredClone(state);
-    const reversed = [...next.windows].reverse();
-    next.windows = reversed.map((window, index) => ({
-      ...window,
-      zIndex: index + 1,
-      focused: index === reversed.length - 1
-    }));
-    return next;
+    return produce(state, draft => {
+      const reversed = [...draft.windows].reverse();
+      draft.windows = reversed.map((window, index) => ({
+        ...window,
+        zIndex: index + 1,
+        focused: index === reversed.length - 1
+      }));
+    });
   }
 };
 
