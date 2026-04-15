@@ -80,18 +80,18 @@ function HeaderBarButtons({ maximized, dark }: { maximized: boolean; dark: boole
 
 function renderWindowBody(window: WindowViewModel) {
   if (window.appView.type === "file-explorer") {
-    return <FileExplorerBody model={window.appView} windowBounds={window.bounds} />;
+    return <FileExplorerBody model={window.appView} windowBounds={window.bounds} focused={window.focused} />;
   }
   if (window.appView.type === "note-editor") {
-    return <NoteEditorBody model={window.appView} windowBounds={window.bounds} />;
+    return <NoteEditorBody model={window.appView} windowBounds={window.bounds} focused={window.focused} />;
   }
   if (window.appView.type === "browser-lite") {
-    return <BrowserBody model={window.appView} windowBounds={window.bounds} />;
+    return <BrowserBody model={window.appView} windowBounds={window.bounds} focused={window.focused} />;
   }
   if (window.appView.type === "terminal-lite") {
-    return <TerminalBody model={window.appView} windowBounds={window.bounds} />;
+    return <TerminalBody model={window.appView} windowBounds={window.bounds} focused={window.focused} />;
   }
-  return <MailBody model={window.appView} windowBounds={window.bounds} />;
+  return <MailBody model={window.appView} windowBounds={window.bounds} focused={window.focused} />;
 }
 
 export function WindowFrame({ window }: { window: WindowViewModel }) {

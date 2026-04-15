@@ -1,5 +1,4 @@
 import type {
-  BrowserLiteState,
   EnvState,
   FileEntry,
   FileExplorerState,
@@ -38,23 +37,6 @@ export type ScenarioExplorerWindowOptions = {
   selectedFileId?: string;
   currentPlace?: FileSystemPlace;
   currentDirectory?: string;
-};
-
-export type BrowserScenarioStart =
-  | { page: "explorer"; categoryId?: string; taskId?: string }
-  | { page: "help"; topicId?: string };
-
-export type BrowserScenarioOptions = {
-  instruction: string;
-  viewport: Viewport;
-  start: BrowserScenarioStart;
-  browserWindowId?: string;
-  browserBounds: Rect;
-  browserFocused?: boolean;
-  browserMinimized?: boolean;
-  workspaceFiles?: ScenarioFileDefinition[];
-  explorerWindow?: ScenarioExplorerWindowOptions | false;
-  noteTarget?: ScenarioNoteWindowOptions;
 };
 
 export type CompanionWindowOptions = {
@@ -138,13 +120,6 @@ export type TerminalScenarioContext = ScenarioContext & {
 
 export type MailScenarioContext = ScenarioContext & {
   mailState: MailLiteState;
-};
-
-export type BrowserScenarioContext = ScenarioContext & {
-  browserState: BrowserLiteState;
-  browserWindowId: string;
-  noteWindowId?: string;
-  explorerWindowId?: string;
 };
 
 export type ExplorerScenarioContext = {

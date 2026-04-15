@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { chromium } from "playwright";
-import { BROWSER_HELP_TOPICS } from "../../../core/src/browser-fixtures.js";
 import type { A11yNode, RenderModel, StepResult } from "../../../core/src/types.js";
 
 type CallToolResult = {
@@ -45,7 +44,7 @@ type HiddenState = {
 };
 
 const TASK_IDS = {
-  browserHelp: "browser_help_preopen_note_distractors",
+  explorer: "rename_note_in_explorer",
   mail: "mail_extract_mock_note",
   terminal: "terminal_record_working_directory"
 } as const;
@@ -124,10 +123,6 @@ function getTargetFileName(hidden: HiddenState) {
   return targetFile.name;
 }
 
-function getBrowserHelpTopicByLine(line: string) {
-  return BROWSER_HELP_TOPICS.find((topic) => topic.lines.includes(line));
-}
-
 function getTargetMessageSubject(hidden: HiddenState) {
   const targetMessageId = hidden.targets.targetMessageId;
   if (!targetMessageId) {
@@ -164,46 +159,6 @@ async function waitForObservedNode(
     await waitForUi(page, delayMs);
   }
   throw new Error("Required a11y node not found.");
-}
-
-async function navigateToBrowserHelp(
-  client: Client,
-  page: import("playwright").Page,
-  sessionId: string,
-  appendText: string
-) {
-  const topic = getBrowserHelpTopicByLine(appendText);
-  const { node: explorerTab } = await waitForObservedNode(
-    client,
-    page,
-    sessionId,
-    (node) => node.role === "button" && node.name === "Task Board"
-  );
-  const explorerPoint = center(explorerTab.bounds);
-  await page.mouse.click(explorerPoint.x, explorerPoint.y);
-  await waitForUi(page, 260);
-
-  const { node: docsBookmark } = await waitForObservedNode(
-    client,
-    page,
-    sessionId,
-    (node) => node.role === "listitem" && node.name === "Ubuntu Docs"
-  );
-  const docsPoint = center(docsBookmark.bounds);
-  await page.mouse.click(docsPoint.x, docsPoint.y);
-  await waitForUi(page, 260);
-
-  if (topic) {
-    const { node: helpTopic } = await waitForObservedNode(
-      client,
-      page,
-      sessionId,
-      (node) => node.role === "listitem" && node.name === topic.title
-    );
-    const helpTopicPoint = center(helpTopic.bounds);
-    await page.mouse.click(helpTopicPoint.x, helpTopicPoint.y);
-    await waitForUi(page, 200);
-  }
 }
 
 async function focusNoteTextboxByIcon(
@@ -822,76 +777,6 @@ async function scenarioFastClickThenType(
   };
 }
 
-async function scenarioViewerOnlyBrowserClipboard(
-  client: Client,
-  page: import("playwright").Page,
-  sessionId: string
-): Promise<QaScenarioResult> {
-  const reset = await callTool<StepResult>(client, "trainer.reset", {
-    sessionId,
-    taskId: TASK_IDS.browserHelp,
-    seed: 0,
-    maxSteps: 0
-  });
-  const hidden = await getHiddenState(client, sessionId);
-  const targetFileName = getTargetFileName(hidden);
-  const appendText = hidden.targets.appendText ?? "";
-  const expectedSavedContent = hidden.targets.expectedSavedContent ?? appendText;
-
-  await page.goto(reset.observation.viewerUrl!, { waitUntil: "domcontentloaded" });
-  await waitForUi(page, 320);
-  const artifacts: string[] = [];
-  artifacts.push(await screenshot(page, "scenario8-reset"));
-
-  await navigateToBrowserHelp(client, page, sessionId, appendText);
-  const observed = await observe(client, sessionId);
-  const helpLine = findNode(
-    observed.observation.a11yTree,
-    (node) => node.role === "label" && node.text === appendText
-  );
-  await page.mouse.click(helpLine.bounds.x + 12, helpLine.bounds.y + Math.round(helpLine.bounds.height / 2));
-  await page.keyboard.press("Control+C");
-  await waitForUi(page, 260);
-  artifacts.push(await screenshot(page, "scenario8-after-copy"));
-
-  const textBox = await focusNoteTextboxByIcon(client, page, sessionId, targetFileName);
-  await page.mouse.click(textBox.bounds.x + 12, textBox.bounds.y + 12);
-  await page.keyboard.press("Control+V");
-  await waitForUi(page, 260);
-  artifacts.push(await screenshot(page, "scenario8-after-paste"));
-
-  await page.getByRole("button", { name: "Save" }).click();
-  await waitForUi(page, 260);
-  artifacts.push(await screenshot(page, "scenario8-after-save"));
-
-  const render = await fetchRenderModel(reset.observation.viewerUrl!, sessionId);
-  const noteWindow = render.windows.find(
-    (window) => window.title === targetFileName && window.appView.type === "note-editor"
-  );
-  const joined =
-    noteWindow && noteWindow.appView.type === "note-editor" ? noteWindow.appView.lines.join("\n") : null;
-
-  const final = await callTool<StepResult>(client, "computer13.step", {
-    sessionId,
-    action: { type: "DONE" }
-  });
-
-  return {
-    name: "viewer-only-browser-copy-paste",
-    passed:
-      joined === expectedSavedContent &&
-      final.terminated &&
-      final.cumulativeReward > 0,
-    details: {
-      targetFileName,
-      appendText,
-      joined,
-      finalReward: final.cumulativeReward,
-      artifacts
-    }
-  };
-}
-
 async function scenarioViewerOnlyTerminalClipboard(
   client: Client,
   page: import("playwright").Page,
@@ -992,7 +877,7 @@ async function scenarioVisibleTextFileOpen(
 
   let reset = await callTool<StepResult>(client, "trainer.reset", {
     sessionId,
-    taskId: TASK_IDS.browserHelp,
+    taskId: TASK_IDS.explorer,
     seed: 0,
     maxSteps: 0
   });
@@ -1052,113 +937,6 @@ async function scenarioVisibleTextFileOpen(
     details: {
       browserOpenWorked,
       terminalOpenWorked,
-      artifacts
-    }
-  };
-}
-
-async function scenarioVisibleTextSourceClipboard(
-  client: Client,
-  page: import("playwright").Page,
-  sessionId: string
-): Promise<QaScenarioResult> {
-  const artifacts: string[] = [];
-
-  let reset = await callTool<StepResult>(client, "trainer.reset", {
-    sessionId,
-    taskId: TASK_IDS.browserHelp,
-    seed: 0,
-    maxSteps: 0
-  });
-  let hidden = await getHiddenState(client, sessionId);
-  let targetFileName = getTargetFileName(hidden);
-  let appendText = hidden.targets.appendText ?? "";
-  let expectedSavedContent = hidden.targets.expectedSavedContent ?? appendText;
-
-  await page.goto(reset.observation.viewerUrl!, { waitUntil: "domcontentloaded" });
-  await waitForUi(page, 320);
-  await navigateToBrowserHelp(client, page, sessionId, appendText);
-  let observed = await observe(client, sessionId);
-  const helpLine = findNode(
-    observed.observation.a11yTree,
-    (node) => node.role === "label" && node.text === appendText
-  );
-  await page.mouse.click(helpLine.bounds.x + 12, helpLine.bounds.y + Math.round(helpLine.bounds.height / 2));
-  await page.keyboard.press("Control+C");
-  await waitForUi(page, 240);
-  const browserEditor = await focusNoteTextboxByIcon(client, page, sessionId, targetFileName);
-  await page.mouse.click(browserEditor.bounds.x + 12, browserEditor.bounds.y + 12);
-  await page.keyboard.press("Control+V");
-  await waitForUi(page, 260);
-  artifacts.push(await screenshot(page, "scenario11-browser-visible-text-paste"));
-
-  let render = await fetchRenderModel(reset.observation.viewerUrl!, sessionId);
-  const browserWindow = render.windows.find(
-    (window) => window.title === targetFileName && window.appView.type === "note-editor"
-  );
-  const browserJoined = browserWindow && browserWindow.appView.type === "note-editor" ? browserWindow.appView.lines.join("\n") : null;
-
-  reset = await callTool<StepResult>(client, "trainer.reset", {
-    sessionId,
-    taskId: TASK_IDS.terminal,
-    seed: 0,
-    maxSteps: 0
-  });
-  hidden = await getHiddenState(client, sessionId);
-  targetFileName = getTargetFileName(hidden);
-  const targetCommand = hidden.targets.targetCommand ?? "pwd";
-  const targetCommandOutput = hidden.targets.targetCommandOutput ?? hidden.targets.appendText ?? "";
-
-  await page.goto(reset.observation.viewerUrl!, { waitUntil: "domcontentloaded" });
-  await waitForUi(page, 320);
-  await page.mouse.click(560, 640);
-  await page.keyboard.type(targetCommand, { delay: 0 });
-  await page.keyboard.press("Enter");
-  await waitForUi(page, 300);
-  observed = await observe(client, sessionId);
-  const workspaceLine = findNode(
-    observed.observation.a11yTree,
-    (node) => node.role === "label" && node.text === targetCommandOutput
-  );
-  const workspaceLinePoint = center(workspaceLine.bounds);
-  await page.mouse.click(workspaceLinePoint.x, workspaceLinePoint.y);
-  await page.keyboard.press("Control+C");
-  await waitForUi(page, 240);
-  observed = await callTool<StepResult>(client, "computer13.observe", { sessionId });
-  const terminalLogFile = findNode(
-    observed.observation.a11yTree,
-    (node) => node.role === "listitem" && node.name === targetFileName
-  );
-  const terminalLogFilePoint = center(terminalLogFile.bounds);
-  await page.mouse.dblclick(terminalLogFilePoint.x, terminalLogFilePoint.y);
-  await waitForUi(page, 320);
-  observed = await callTool<StepResult>(client, "computer13.observe", { sessionId });
-  const terminalEditor = findNode(
-    observed.observation.a11yTree,
-    (node) => node.role === "textbox" && node.name === targetFileName
-  );
-  await page.mouse.click(terminalEditor.bounds.x + 12, terminalEditor.bounds.y + 12);
-  await page.keyboard.press("Control+V");
-  await waitForUi(page, 260);
-  artifacts.push(await screenshot(page, "scenario11-terminal-visible-text-paste"));
-
-  render = await fetchRenderModel(reset.observation.viewerUrl!, sessionId);
-  const terminalWindow = render.windows.find(
-    (window) => window.title === targetFileName && window.appView.type === "note-editor"
-  );
-  const terminalJoined =
-    terminalWindow && terminalWindow.appView.type === "note-editor" ? terminalWindow.appView.lines.join("\n") : null;
-
-  return {
-    name: "visible-text-source-clipboard",
-    passed:
-      browserJoined === expectedSavedContent &&
-      terminalJoined === targetCommandOutput,
-    details: {
-      targetFileName,
-      appendText,
-      browserJoined,
-      terminalJoined,
       artifacts
     }
   };
@@ -1276,7 +1054,7 @@ async function scenarioFileExplorerCreateEntries(
 ): Promise<QaScenarioResult> {
   const reset = await callTool<StepResult>(client, "trainer.reset", {
     sessionId,
-    taskId: TASK_IDS.browserHelp,
+    taskId: TASK_IDS.explorer,
     seed: 0,
     maxSteps: 0
   });
@@ -1416,10 +1194,8 @@ async function main() {
     results.push(await scenarioRepeatedDragAndFollowUpClicks(client, page, created.sessionId));
     results.push(await scenarioTopEdgeSnapMaximize(client, page, created.sessionId));
     results.push(await scenarioFastClickThenType(client, page, created.sessionId));
-    results.push(await scenarioViewerOnlyBrowserClipboard(client, page, created.sessionId));
     results.push(await scenarioViewerOnlyTerminalClipboard(client, page, created.sessionId));
     results.push(await scenarioVisibleTextFileOpen(client, page, created.sessionId));
-    results.push(await scenarioVisibleTextSourceClipboard(client, page, created.sessionId));
     results.push(await scenarioMailHeavyClickRecovery(client, page, created.sessionId));
     results.push(await scenarioFileExplorerCreateEntries(client, page, created.sessionId));
 

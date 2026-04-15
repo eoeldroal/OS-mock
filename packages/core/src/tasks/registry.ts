@@ -15,10 +15,7 @@ const TEAM3_REPRESENTATIVE = TEAM3_TASKS.filter((t) => t.split === "representati
 export const ALL_TASKS: TaskSpec[] = [...STARTER_TASKS, ...REPRESENTATIVE_TASKS, ...FILES_WINDOW_TASKS, ...TEAM3_TASKS];
 
 const TASK_MAP = new Map<string, TaskSpec>(ALL_TASKS.map((task) => [task.id, task]));
-const TASK_ID_ALIASES: Record<string, string> = {
-  browser_log_workflow_task_id: "browser_log_task_preopen_note_hard",
-  browser_capture_help_line: "browser_help_preopen_note_distractors"
-};
+const TASK_ID_ALIASES: Record<string, string> = {};
 
 // 2. 범인이었던 resolveTasks 함수를 동적 필터링으로 수정 ✅
 function resolveTasks(split: TaskSplit = "all") {

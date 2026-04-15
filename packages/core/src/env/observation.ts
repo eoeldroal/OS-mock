@@ -303,7 +303,7 @@ export function buildA11yTree(state: EnvState): A11yNode[] {
     children: getTaskbarItems(state).map((item) => ({
       id: `taskbar-${item.windowId}`,
       role: "icon",
-      name: item.title,
+      name: item.minimized ? `${item.title} (minimized)` : item.title,
       bounds: item.bounds,
       visible: true,
       enabled: true,
@@ -329,7 +329,7 @@ export function buildA11yTree(state: EnvState): A11yNode[] {
     {
       id: "desktop",
       role: "desktop",
-      name: "OS Mock Desktop",
+      name: "Desktop workspace",
       bounds: {
         x: 0,
         y: 0,

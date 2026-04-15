@@ -134,23 +134,6 @@ describe("task contract regression coverage", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps canonical representative aliases reset-compatible with the same public contract", () => {
-    const aliasPairs = [
-      ["browser_log_workflow_task_id", "browser_log_task_preopen_note_hard"],
-      ["browser_capture_help_line", "browser_help_preopen_note_distractors"]
-    ] as const;
-
-    for (const [aliasId, canonicalId] of aliasPairs) {
-      const env = new MockOsEnv();
-      const resetResult = env.reset({ taskId: aliasId, seed: 0, maxSteps: 0 });
-
-      expect(resetResult.task?.id).toBe(canonicalId);
-      expect(getTaskSpec(aliasId).id).toBe(canonicalId);
-      expect(flattenA11y(resetResult.observation.a11yTree).some((node) => node.id === "desktop")).toBe(true);
-      expect(Array.isArray(resetResult.observation.browserAugmentations)).toBe(true);
-    }
-  });
-
   it("keeps blank authoring descriptions isolated to explicit legacy-imported tasks", () => {
     const authoringMetadata = listTaskAuthoringMetadata("all");
     const blankDescriptions = authoringMetadata.filter(

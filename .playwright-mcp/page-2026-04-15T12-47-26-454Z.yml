@@ -1,0 +1,163 @@
+- generic [active] [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e7]: Activities
+    - generic [ref=e8]: Mon 11:24
+    - generic [ref=e10]: EN
+  - generic [ref=e22]:
+    - generic "Files":
+      - generic:
+        - img "Files"
+    - generic "Mozilla Firefox":
+      - generic:
+        - img "Firefox"
+    - generic "Terminal":
+      - generic:
+        - img "Terminal"
+    - generic "Thunderbird":
+      - generic:
+        - img "Thunderbird"
+  - generic:
+    - generic:
+      - img "Home"
+    - generic: Home
+  - generic:
+    - generic:
+      - img "Documents"
+    - generic: Documents
+  - generic:
+    - generic:
+      - img "Downloads"
+    - generic: Downloads
+  - generic:
+    - generic:
+      - generic: 🗑
+    - generic: Trash
+  - generic:
+    - generic:
+      - img "notes.txt"
+    - generic: notes.txt
+  - generic [ref=e23]:
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - button "Close window" [ref=e26] [cursor=pointer]
+        - button "Minimize window" [ref=e27] [cursor=pointer]
+        - button "Maximize window" [ref=e28] [cursor=pointer]
+      - generic [ref=e29]:
+        - img "Files" [ref=e30]
+        - generic [ref=e31]: Files
+    - generic [ref=e33]:
+      - generic [ref=e35]: Places
+      - generic [ref=e36] [cursor=pointer]:
+        - img [ref=e38]
+        - text: Home
+      - generic [ref=e40] [cursor=pointer]:
+        - img [ref=e42]
+        - text: Desktop
+      - generic [ref=e44] [cursor=pointer]:
+        - img [ref=e46]
+        - text: Documents
+      - generic [ref=e49] [cursor=pointer]:
+        - img [ref=e51]
+        - text: Downloads
+      - generic [ref=e54] [cursor=pointer]:
+        - img [ref=e56]
+        - text: workspace
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e61]: <
+          - generic [ref=e63]: workspace
+        - generic [ref=e65]:
+          - generic [ref=e66]: ⌕
+          - generic [ref=e67]: Find
+      - generic [ref=e68]:
+        - generic [ref=e70]: Name
+        - generic [ref=e74]:
+          - generic "/workspace/reference.txt" [ref=e75]:
+            - img [ref=e77]
+            - generic [ref=e80]:
+              - generic [ref=e81]: reference.txt
+              - generic [ref=e82]:
+                - generic [ref=e83]: Text file
+                - generic [ref=e84]: •
+                - generic [ref=e85]: Today
+          - generic "/workspace/mail-log.txt" [ref=e86]:
+            - img [ref=e88]
+            - generic [ref=e91]:
+              - generic [ref=e92]: mail-log.txt
+              - generic [ref=e93]:
+                - generic [ref=e94]: Text file
+                - generic [ref=e95]: •
+                - generic [ref=e96]: Today
+        - generic [ref=e97]:
+          - generic [ref=e98]: 0 folders, 2 files
+          - generic [ref=e99]: No selection
+  - generic [ref=e100]:
+    - generic [ref=e101]:
+      - generic [ref=e102]:
+        - button "Close window" [ref=e103] [cursor=pointer]
+        - button "Minimize window" [ref=e104] [cursor=pointer]
+        - button "Maximize window" [ref=e105] [cursor=pointer]
+      - generic [ref=e106]:
+        - img "Thunderbird" [ref=e107]
+        - generic [ref=e108]: Thunderbird
+    - generic [ref=e110]:
+      - generic:
+        - generic:
+          - generic: Tb
+          - generic:
+            - generic: Inbox
+            - generic: 2 visible, 2 unread across folders
+        - generic:
+          - generic: Search in inbox
+      - generic [ref=e111]:
+        - generic [ref=e112]: Folders
+        - generic [ref=e113]:
+          - generic [ref=e114]: personal@workspace.local
+          - generic [ref=e115]: Recent mail and active threads
+        - generic [ref=e119]:
+          - generic:
+            - generic:
+              - generic:
+                - generic: Inbox
+              - generic:
+                - generic: "2"
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - generic [ref=e122]: Messages
+          - generic [ref=e123]: Date
+        - generic [ref=e127]:
+          - generic:
+            - generic:
+              - generic:
+                - generic: U
+                - generic: updates@osmock.local
+              - generic: 11:24
+            - generic: System update available
+            - generic: A new desktop build is ready for review.
+          - generic:
+            - generic:
+              - generic:
+                - generic: F
+                - generic: facilities@osmock.local
+              - generic: 10:08
+            - generic: Loading dock reminder
+            - generic: Please confirm the loading dock booking before 4 PM.
+      - generic [ref=e128]:
+        - generic [ref=e129]:
+          - generic [ref=e130]: System update available
+          - generic [ref=e131]:
+            - generic [ref=e132]: Important
+            - generic [ref=e133]: Reply
+        - generic [ref=e134]:
+          - generic [ref=e135]: updates@osmock.local
+          - generic [ref=e136]: Today 11:24
+        - generic [ref=e137]: A new desktop build is ready for review.
+        - generic [ref=e138]:
+          - generic [ref=e139]:
+            - generic [ref=e140]: Folder
+            - generic [ref=e141]: Inbox
+          - generic [ref=e142]:
+            - generic [ref=e143]: Sender
+            - generic [ref=e144]: updates@osmock.local
+        - generic [ref=e145]: Message body
+        - generic [ref=e151]: A new desktop build is ready for review.

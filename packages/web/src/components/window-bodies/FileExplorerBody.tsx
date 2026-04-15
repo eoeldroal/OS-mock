@@ -2,6 +2,12 @@ import type { FileExplorerBodyProps } from "./body-types.js";
 import { PaneScrollArea } from "../PaneScrollArea.js";
 import { narrowWidth, toLocalRect } from "./layout-helpers.js";
 
+const FULL_LIST_COLUMN_TEMPLATE = "minmax(0,1.75fr) minmax(72px,0.9fr) minmax(64px,0.78fr) minmax(52px,0.55fr)";
+const COMPACT_LIST_COLUMN_TEMPLATE = "minmax(0,1fr) minmax(64px,auto)";
+const FULL_ROW_COLUMN_TEMPLATE = "24px minmax(0,1.75fr) minmax(72px,0.9fr) minmax(64px,0.78fr) minmax(52px,0.55fr)";
+const COMPACT_ROW_COLUMN_TEMPLATE = "24px minmax(0,1fr) minmax(64px,auto)";
+const STACKED_ROW_COLUMN_TEMPLATE = "24px minmax(0,1fr)";
+
 function PlaceIcon({ item, active }: { item: string; active: boolean }) {
   const stroke = active ? "#475569" : "#64748b";
   const fill = active ? "#e6edf8" : "#edf2f7";
@@ -77,8 +83,8 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
   const compactToolbar = narrowWidth(layout.toolbarBounds.width, 430);
   const ultraCompactToolbar = narrowWidth(layout.toolbarBounds.width, 320);
   const compressedToolbar = narrowWidth(layout.toolbarBounds.width, 380);
-  const compactRows = narrowWidth(layout.listBounds.width, 250);
-  const stackedRows = narrowWidth(layout.listBounds.width, 210);
+  const compactRows = layout.compactRows;
+  const stackedRows = layout.stackedRows;
   const folderCount = model.files.filter((file) => file.kind === "folder").length;
   const fileCount = model.files.length - folderCount;
 
@@ -87,7 +93,7 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
       ? ["Home"]
       : ["Home", ...model.currentDirectory.split("/").filter(Boolean)];
   const compactFolderLabel = breadcrumbParts[breadcrumbParts.length - 1] ?? "Home";
-  const toolbarSearchLabel = ultraCompactToolbar ? "Find" : compactToolbar ? "Search" : "Search";
+  const toolbarSearchLabel = ultraCompactToolbar ? "Find" : "Search";
 
   const formatMeta = (file: (typeof model.files)[number]) => {
     if (file.kind === "folder") {
@@ -100,29 +106,35 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
 
   const sidebarRect = toLocalRect(layout.sidebarBounds, windowBounds);
   const toolbarRect = toLocalRect(layout.toolbarBounds, windowBounds);
-  const backButtonRect = toLocalRect(layout.backButtonBounds, windowBounds);
   const sectionHeadingRect = toLocalRect(layout.renameHintBounds, windowBounds);
   const listRect = toLocalRect(layout.listBounds, windowBounds);
-  const headerHeight = 34;
-  const footerHeight = 26;
-  const rowTopOffset = headerHeight + 1;
+  const listHeaderRect = toLocalRect(layout.listHeaderBounds, windowBounds);
+  const listViewportRect = toLocalRect(layout.listViewportBounds, windowBounds);
+  const listFooterRect = toLocalRect(layout.listFooterBounds, windowBounds);
+  const favoritesHeadingRect = layout.sidebarFavoritesHeadingBounds
+    ? toLocalRect(layout.sidebarFavoritesHeadingBounds, windowBounds)
+    : undefined;
+  const favoriteItemRects = layout.sidebarFavoriteItemRects.map((rect) => toLocalRect(rect, windowBounds));
+  const storageHeadingRect = layout.sidebarStorageHeadingBounds
+    ? toLocalRect(layout.sidebarStorageHeadingBounds, windowBounds)
+    : undefined;
+  const storageItemRects = layout.sidebarStorageItemRects.map((rect) => toLocalRect(rect, windowBounds));
+  const sidebarSummaryRect = layout.sidebarSummaryBounds ? toLocalRect(layout.sidebarSummaryBounds, windowBounds) : undefined;
+  // Keep file-list vertical geometry canonical: the core layout owns header, viewport, footer, and row positions.
   const fileRowOffsets = model.files.map((_, index) => {
     const rect = toLocalRect(layout.fileRowRects[index], windowBounds);
-    return rect.top - listRect.top;
+    return rect.top - listViewportRect.top;
   });
-  const fileRowsBaseTop = fileRowOffsets.length > 0 ? Math.min(...fileRowOffsets) : 0;
-  const listViewportTop = fileRowsBaseTop + rowTopOffset;
-  const listViewportHeight = Math.max(0, listRect.height - listViewportTop - footerHeight);
   const listContentHeight =
     fileRowOffsets.length > 0
       ? Math.max(
-          listViewportHeight,
+          listViewportRect.height,
           ...model.files.map((_, index) => {
             const rect = toLocalRect(layout.fileRowRects[index], windowBounds);
-            return rect.top - listRect.top + rowTopOffset - listViewportTop + rect.height;
+            return rect.top - listViewportRect.top + rect.height;
           })
         )
-      : listViewportHeight;
+      : listViewportRect.height;
   const favorites = [
     { label: "Recent", icon: "⟳" },
     { label: "Starred", icon: "★" },
@@ -133,13 +145,18 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
     { label: "Network", icon: "⇄" },
     { label: "Other Locations", icon: "⋯" }
   ];
-  const sidebarFooterTop = sidebarRect.top + sidebarRect.height - (compactToolbar ? 44 : 90);
   const listColumnTemplate = stackedRows
     ? "minmax(0,1fr)"
     : compactRows
-    ? "minmax(0,1fr) minmax(78px,auto)"
-    : "minmax(0,1.8fr) minmax(92px,0.9fr) minmax(82px,0.85fr) minmax(66px,0.7fr)";
+    ? COMPACT_LIST_COLUMN_TEMPLATE
+    : FULL_LIST_COLUMN_TEMPLATE;
+  const rowColumnTemplate = stackedRows
+    ? STACKED_ROW_COLUMN_TEMPLATE
+    : compactRows
+    ? COMPACT_ROW_COLUMN_TEMPLATE
+    : FULL_ROW_COLUMN_TEMPLATE;
   const sectionLabel = compactToolbar ? compactFolderLabel : breadcrumbParts[breadcrumbParts.length - 1];
+  const sectionLabelWidth = Math.max(0, listRect.width - 24);
   const yaruInk = "#2e3436";
   const yaruMuted = "#6f7682";
   const yaruBorder = "#d7dde5";
@@ -166,7 +183,7 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
         <div style={{ fontSize: 10, fontWeight: 700, color: yaruMuted, textTransform: "uppercase", letterSpacing: "0.07em" }}>Places</div>
       </div>
 
-      {["Home", "Desktop", "Documents", "Downloads", "workspace"].map((item, index) => {
+      {model.places.map((item, index) => {
         const rect = toLocalRect(layout.sidebarItemRects[index], windowBounds);
         const active = model.currentPlace === item;
         return (
@@ -199,14 +216,15 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
         );
       })}
 
-      {!compactToolbar && (
-        <>
+      <>
+        {favoritesHeadingRect && (
           <div
             style={{
               position: "absolute",
-              left: sidebarRect.left + 14,
-              top: sidebarRect.top + 262,
-              width: sidebarRect.width - 28,
+              left: favoritesHeadingRect.left,
+              top: favoritesHeadingRect.top,
+              width: favoritesHeadingRect.width,
+              height: favoritesHeadingRect.height,
               fontSize: 11,
               fontWeight: 700,
               color: yaruMuted,
@@ -216,15 +234,21 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
           >
             Favorites
           </div>
-          {favorites.map((item, index) => (
+        )}
+        {favorites.map((item, index) => {
+          const rect = favoriteItemRects[index];
+          if (!rect) {
+            return null;
+          }
+          return (
             <div
               key={item.label}
               style={{
                 position: "absolute",
-                left: sidebarRect.left + 26,
-                top: sidebarRect.top + 252 + index * 28,
-                width: sidebarRect.width - 40,
-                height: 24,
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height,
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
@@ -235,13 +259,16 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
               <span style={{ width: 16, textAlign: "center", opacity: 0.75 }}>{item.icon}</span>
               <span>{item.label}</span>
             </div>
-          ))}
+          );
+        })}
+        {storageHeadingRect && (
           <div
             style={{
               position: "absolute",
-              left: sidebarRect.left + 14,
-              top: sidebarRect.top + 402,
-              width: sidebarRect.width - 28,
+              left: storageHeadingRect.left,
+              top: storageHeadingRect.top,
+              width: storageHeadingRect.width,
+              height: storageHeadingRect.height,
               fontSize: 11,
               fontWeight: 700,
               color: yaruMuted,
@@ -251,15 +278,21 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
           >
             Storage
           </div>
-          {storage.map((item, index) => (
+        )}
+        {storage.map((item, index) => {
+          const rect = storageItemRects[index];
+          if (!rect) {
+            return null;
+          }
+          return (
             <div
               key={item.label}
               style={{
                 position: "absolute",
-                left: sidebarRect.left + 26,
-                top: sidebarRect.top + 340 + index * 26,
-                width: sidebarRect.width - 40,
-                height: 22,
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height,
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
@@ -270,19 +303,21 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
               <span style={{ width: 16, textAlign: "center", opacity: 0.72 }}>{item.icon}</span>
               <span>{item.label}</span>
             </div>
-          ))}
+          );
+        })}
+        {sidebarSummaryRect && (
           <div
             style={{
               position: "absolute",
-              left: sidebarRect.left + 12,
-              top: sidebarFooterTop,
-              width: sidebarRect.width - 24,
-              minHeight: compactToolbar ? 32 : 54,
+              left: sidebarSummaryRect.left,
+              top: sidebarSummaryRect.top,
+              width: sidebarSummaryRect.width,
+              height: sidebarSummaryRect.height,
               borderRadius: 10,
               background: "rgba(255,255,255,0.42)",
               border: `1px solid ${yaruBorder}`,
               boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4)",
-              padding: compactToolbar ? "6px 8px" : "8px 10px",
+              padding: "8px 10px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
@@ -297,8 +332,8 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
               <span>{fileCount} files</span>
             </div>
           </div>
-        </>
-      )}
+        )}
+      </>
 
       <div
         style={{
@@ -461,10 +496,10 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
           style={{
             position: "absolute",
             left: sectionHeadingRect.left,
-          top: sectionHeadingRect.top + 2,
-          width: Math.max(120, listRect.width - 24),
-          height: sectionHeadingRect.height,
-          fontSize: 11,
+            top: sectionHeadingRect.top + 2,
+            width: sectionLabelWidth,
+            height: sectionHeadingRect.height,
+            fontSize: 11,
             fontWeight: 700,
             color: yaruMuted,
             textTransform: "uppercase",
@@ -483,8 +518,8 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
           style={{
             position: "absolute",
             left: sectionHeadingRect.left,
-          top: sectionHeadingRect.top + 19,
-            width: Math.max(120, listRect.width - 24),
+            top: sectionHeadingRect.top + 19,
+            width: sectionLabelWidth,
             fontSize: 11,
             color: yaruMuted,
             whiteSpace: "nowrap",
@@ -512,7 +547,8 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
       >
         <div
           style={{
-            height: compactRows ? 28 : 30,
+            height: listHeaderRect.height,
+            boxSizing: "border-box",
             borderBottom: "1px solid #eef1f5",
             display: "grid",
             gridTemplateColumns: listColumnTemplate,
@@ -535,10 +571,12 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
 
         <PaneScrollArea
           style={{
-            top: listViewportTop,
-            bottom: footerHeight,
-            left: 0,
-            right: 0
+            top: listViewportRect.top - listRect.top,
+            left: listViewportRect.left - listRect.left,
+            right: "auto",
+            bottom: "auto",
+            width: listViewportRect.width,
+            height: listViewportRect.height
           }}
           viewportStyle={{
             paddingBottom: 8
@@ -563,17 +601,13 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
                 title={file.path}
                 style={{
                   position: "absolute",
-                  left: rect.left - listRect.left,
-                  top: rect.top - listRect.top + rowTopOffset - listViewportTop,
-              width: rect.width,
-              height: rect.height,
-              display: "grid",
-              gridTemplateColumns: stackedRows
-                ? "24px minmax(0,1fr)"
-                : compactRows
-                ? "24px minmax(0,1fr) minmax(78px,auto)"
-                : "24px minmax(0,1.8fr) minmax(92px,0.9fr) minmax(82px,0.85fr) minmax(66px,0.7fr)",
-              alignItems: "center",
+                  left: rect.left - listViewportRect.left,
+                  top: rect.top - listViewportRect.top,
+                  width: rect.width,
+                  height: rect.height,
+                  display: "grid",
+                  gridTemplateColumns: rowColumnTemplate,
+                  alignItems: "center",
                   gap: compactRows ? 6 : 7,
                   padding: compactRows ? "0 8px" : "0 10px",
                   borderBottom: index === model.files.length - 1 ? "none" : "1px solid #eef1f5",
@@ -713,7 +747,8 @@ export function FileExplorerBody({ model, windowBounds }: FileExplorerBodyProps)
             left: 0,
             right: 0,
             bottom: 0,
-            height: footerHeight,
+            height: listFooterRect.height,
+            boxSizing: "border-box",
             borderTop: "1px solid #eef1f5",
             background: "linear-gradient(180deg, #fafbfc 0%, #f3f5f7 100%)",
             display: "flex",

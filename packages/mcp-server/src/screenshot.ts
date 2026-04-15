@@ -19,11 +19,19 @@ export class ScreenshotService {
     const page = await browser.newPage({
       viewport: { width: 1280, height: 800 }
     });
+    const viewerPort = (() => {
+      try {
+        return new URL(viewerUrl).port || "default";
+      } catch {
+        return "default";
+      }
+    })();
     const filePath = resolve(
       this.rootDir,
       "tmp",
       "os-mock",
       "sessions",
+      `port-${viewerPort}`,
       sessionId,
       `frame-${String(stepIndex).padStart(4, "0")}.png`
     );
@@ -41,4 +49,3 @@ export class ScreenshotService {
     }
   }
 }
-

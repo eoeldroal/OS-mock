@@ -19,29 +19,29 @@ export function terminalBounds() {
 }
 
 export function mailBounds() {
-  return { x: 792, y: 84, width: 460, height: 460 };
+  return { x: 742, y: 84, width: 510, height: 484 };
 }
 
 export function mailAuditExplorerBounds() {
-  return { x: 92, y: 84, width: 332, height: 512 };
+  return { x: 92, y: 84, width: 348, height: 520 };
 }
 
 export function mailAuditBounds() {
-  return { x: 456, y: 84, width: 566, height: 548 };
+  return { x: 452, y: 84, width: 604, height: 556 };
 }
 
 export function noteBoundsRight() {
-  return { x: 968, y: 84, width: 300, height: 380 };
+  return { x: 918, y: 84, width: 350, height: 420 };
 }
 
 export function browserHelpExplorerBounds() {
-  return { x: 72, y: 84, width: 188, height: 592 };
+  return { x: 72, y: 84, width: 200, height: 592 };
 }
 
 export function browserHelpBrowserBounds() {
-  return { x: 274, y: 84, width: 618, height: 560 };
+  return { x: 286, y: 84, width: 632, height: 572 };
 }
 
 export function browserHelpNoteBounds() {
-  return { x: 906, y: 94, width: 346, height: 400 };
+  return { x: 934, y: 96, width: 334, height: 430 };
 }

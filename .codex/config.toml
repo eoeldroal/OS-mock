@@ -1,6 +1,24 @@
+model = "gpt-5.4"
+model_context_window = 600000
+model_auto_compact_token_limit = 550000
+model_reasoning_effort = "xhigh"
+
 [mcp_servers.cowork_os_mock]
 command = "/opt/homebrew/opt/node@20/bin/node"
 args = ["/Users/baghyeonbin/Desktop/CoWork/packages/mcp-server/dist/index.js"]
 cwd = "/Users/baghyeonbin/Desktop/CoWork"
 startup_timeout_sec = 20
 tool_timeout_sec = 120
+
+[notice]
+hide_full_access_warning = true
+
+[features]
+multi_agent = true
+use_linux_sandbox_bwrap = true
+apps = true
+js_repl = true
+prevent_idle_sleep = true
+
+[tui]
+status_line = ["model-with-reasoning", "context-remaining", "context-window-size"]

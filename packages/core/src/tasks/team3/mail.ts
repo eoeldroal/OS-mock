@@ -1,6 +1,6 @@
 import type { TaskSpec, Viewport } from "../../types.js";
-import { buildMailTaskSetup } from "../scenario-builders.js";
-import { TEAM3_MAIL_DOMAIN, createTeam3NoteTarget, defineTeam3Task } from "./shared.js";
+import { buildMailTaskSetup, createMailScenario, createNoteTargets } from "../scenario-builders.js";
+import { TEAM3_MAIL_DOMAIN, createTeam3File, createTeam3NoteTarget, defineTeam3Task } from "./shared.js";
 
 export const mailExtractInvoiceTask: TaskSpec = defineTeam3Task({
   id: "mail_extract_invoice_amount",
@@ -229,14 +229,26 @@ export const mailExtractSpamSenderTask: TaskSpec = defineTeam3Task({
     const senders = ["tax@irs-mock.gov", "refund@tax-mock.org", "notice@revenue-mock.com"];
     const sender = senders[seed % senders.length];
     const targetMessageId = `msg-tax-${seed}`;
-
-    return buildMailTaskSetup({
+    const noteTarget = createTeam3NoteTarget("team3-t9-tax-note", "tax_sender.txt");
+    const scenario = createMailScenario({
       instruction:
         "Open Thunderbird, go to the 'Spam' folder, find the 'Important Tax Document' email, extract the sender's address, and save it to 'tax_sender.txt'.",
       viewport,
-      noteTarget: createTeam3NoteTarget("team3-t9-tax-note", "tax_sender.txt"),
-      expectedSavedContent: sender,
-      targetMessageId,
+      noteTarget,
+      noteWindow: false,
+      explorerWindow: {
+        windowId: "explorer-main",
+        bounds: { x: 92, y: 84, width: 336, height: 520 },
+        focused: false,
+        minimized: false
+      },
+      mailWindow: {
+        windowId: "mail-main",
+        bounds: { x: 444, y: 84, width: 592, height: 548 },
+        focused: true,
+        minimized: false
+      },
+      scenarioFiles: [createTeam3File("team3-t9-ref", "spam-review.txt", "Review suspicious senders before filing.", "/workspace")],
       messages: [
         {
           id: targetMessageId,
@@ -253,6 +265,14 @@ export const mailExtractSpamSenderTask: TaskSpec = defineTeam3Task({
       ],
       initialFolderId: "inbox"
     });
+
+    return {
+      envState: scenario.envState,
+      targets: {
+        ...createNoteTargets(scenario.noteFileId, sender),
+        targetMessageId
+      }
+    };
   }
 });
 

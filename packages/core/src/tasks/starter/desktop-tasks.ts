@@ -6,9 +6,6 @@ import {
   browserBounds,
   explorerBounds,
   mailBounds,
-  noteBoundsCenter,
-  noteBoundsLeft,
-  noteBoundsRight,
   pickVariant,
   renameBrowserBounds,
   renameExplorerBounds,
@@ -82,7 +79,7 @@ function buildCopyTask(seed: number, viewport: Viewport) {
         initialContent: `${sourceLine}\nLine two`,
         preopen: true,
         windowId: "notes-source",
-        bounds: noteBoundsLeft(),
+        bounds: { x: 408, y: 84, width: 406, height: 476 },
         focused: true,
         minimized: false
       },
@@ -92,7 +89,7 @@ function buildCopyTask(seed: number, viewport: Viewport) {
         initialContent: "Target body",
         preopen: true,
         windowId: "notes-target",
-        bounds: noteBoundsRight(),
+        bounds: { x: 832, y: 84, width: 406, height: 476 },
         focused: false,
         minimized: false
       }
@@ -127,7 +124,7 @@ function buildMinimizeRecoverTask(seed: number, viewport: Viewport) {
         buffer: `Start content${suffix}`,
         preopen: true,
         windowId: "notes-recover",
-        bounds: noteBoundsCenter(),
+        bounds: { x: 702, y: 96, width: 430, height: 488 },
         focused: true,
         minimized: false,
         dirty: true

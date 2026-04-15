@@ -9,6 +9,10 @@ export function TerminalBody({ model, windowBounds }: TerminalBodyProps) {
   const terminalRect = toLocalRect(layout.terminalBounds, windowBounds);
   const inputRect = toLocalRect(layout.inputBounds, windowBounds);
   const titleCwd = model.cwd === "/" ? "/" : model.cwd.replace(/^\/+/, "");
+  const deepPathMode = titleCwd.length > 22;
+  const historyDenseMode = model.lines.some((line) => line.length > 52);
+  const lineFontSize = ultraDenseMode ? 12.5 : denseMode || historyDenseMode ? 13.5 : 15;
+  const promptFontSize = ultraDenseMode ? 12.5 : denseMode || deepPathMode ? 13.5 : 15;
 
   return (
     <div
@@ -58,7 +62,7 @@ export function TerminalBody({ model, windowBounds }: TerminalBodyProps) {
             <div
               style={{
                 minWidth: 0,
-                maxWidth: ultraDenseMode ? 92 : denseMode ? 120 : 180,
+                maxWidth: ultraDenseMode ? 108 : denseMode ? 156 : 236,
                 fontSize: 11,
                 color: "rgba(226,232,240,0.72)",
                 background: "rgba(255,255,255,0.05)",
@@ -117,7 +121,7 @@ export function TerminalBody({ model, windowBounds }: TerminalBodyProps) {
               width: rect.width,
               height: rect.height,
               fontFamily: '"Ubuntu Mono", ui-monospace, monospace',
-              fontSize: denseMode ? 14 : 15,
+              fontSize: lineFontSize,
               lineHeight: 1.42,
               color: isPromptLine ? "#f8fafc" : "#d9dee7",
               background: model.selectedLineIndex === index ? "rgba(96,165,250,0.14)" : "transparent",
@@ -144,7 +148,7 @@ export function TerminalBody({ model, windowBounds }: TerminalBodyProps) {
           width: inputRect.width,
           height: inputRect.height,
           fontFamily: '"Ubuntu Mono", ui-monospace, monospace',
-          fontSize: denseMode ? 14 : 15,
+          fontSize: promptFontSize,
           lineHeight: 1.42,
           color: "#f8fafc",
           display: "flex",
@@ -161,7 +165,7 @@ export function TerminalBody({ model, windowBounds }: TerminalBodyProps) {
           style={{
             color: "#f6c177",
             minWidth: 0,
-            maxWidth: ultraDenseMode ? "28%" : denseMode ? "34%" : "38%",
+            maxWidth: ultraDenseMode ? "34%" : denseMode || deepPathMode ? "52%" : "58%",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",

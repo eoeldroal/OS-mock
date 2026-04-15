@@ -19,20 +19,20 @@ describe("task registry integrity", () => {
     const trainTasks = listTasks("train");
     const evalTasks = listTasks("eval");
 
-    expect(allTasks).toHaveLength(200);
-    expect(starterTasks).toHaveLength(100);
-    expect(representativeTasks).toHaveLength(100);
-    expect(trainTasks).toHaveLength(100);
-    expect(evalTasks).toHaveLength(100);
+    expect(allTasks).toHaveLength(96);
+    expect(starterTasks).toHaveLength(48);
+    expect(representativeTasks).toHaveLength(48);
+    expect(trainTasks).toHaveLength(48);
+    expect(evalTasks).toHaveLength(48);
 
     expect(new Set(ALL_TASKS.map((task) => task.id)).size).toBe(ALL_TASKS.length);
     expect(trainTasks.map((task) => task.id)).toEqual(representativeTasks.map((task) => task.id));
     expect(evalTasks.map((task) => task.id)).toEqual(representativeTasks.map((task) => task.id));
   });
 
-  it("keeps compatibility aliases pointed at live tasks", () => {
-    expect(getTaskSpec("browser_log_workflow_task_id").id).toBe("browser_log_task_preopen_note_hard");
-    expect(getTaskSpec("browser_capture_help_line").id).toBe("browser_help_preopen_note_distractors");
+  it("removes legacy browser fixture aliases from the live registry", () => {
+    expect(() => getTaskSpec("browser_log_workflow_task_id")).toThrow("Unknown task");
+    expect(() => getTaskSpec("browser_capture_help_line")).toThrow("Unknown task");
   });
 
   it("keeps public catalog summaries and authoring metadata aligned across splits", () => {
@@ -64,7 +64,7 @@ describe("task registry integrity", () => {
     expect(missingPaths).toEqual([]);
   });
 
-  it("keeps compatibility aliases out of the public catalog surface", () => {
+  it("keeps removed browser fixture aliases out of the public catalog surface", () => {
     const publicIds = new Set(listTasks("all").map((task) => task.id));
     const authoringIds = new Set(listTaskAuthoringMetadata("all").map((task) => task.id));
 

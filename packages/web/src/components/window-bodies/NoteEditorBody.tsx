@@ -1,7 +1,7 @@
 import type { NoteEditorBodyProps } from "./body-types.js";
 import { toLocalRect } from "./layout-helpers.js";
 
-export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
+export function NoteEditorBody({ model, windowBounds, focused = false }: NoteEditorBodyProps) {
   const { layout } = model;
   const toolbarRect = toLocalRect(layout.toolbarBounds, windowBounds);
   const saveRect = toLocalRect(layout.saveButtonBounds, windowBounds);
@@ -14,8 +14,35 @@ export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
   const narrowEditor = frameRect.width < 250;
   const crampedEditor = frameRect.width < 320;
   const savedState = !model.dirty;
+  const emptyPristine = savedState && model.content.trim().length === 0;
   const reservedSaveWidth = Math.max(64, Math.min(saveRect.width, ultraCompactToolbar ? 72 : compactToolbar ? 84 : saveRect.width));
-  const editorLinePadding = crampedEditor ? 5 : ultraCompactToolbar ? 6 : compactToolbar ? 8 : 10;
+  const editorLinePadding = crampedEditor ? 4 : ultraCompactToolbar ? 5 : compactToolbar ? 7 : 9;
+  const editorFontSize = crampedEditor ? 11.25 : narrowEditor ? 12.25 : compactToolbar ? 13.5 : 14.5;
+  const statusText = model.dirty
+    ? "Draft not saved yet"
+    : emptyPristine
+      ? "Ready to edit"
+      : "All changes saved";
+  const saveButtonStyle = model.dirty
+    ? {
+        background: "#e95420",
+        color: "#ffffff",
+        border: "none",
+        boxShadow: "0 1px 0 rgba(255,255,255,0.22) inset, 0 6px 14px rgba(233,84,32,0.18)"
+      }
+    : emptyPristine
+      ? {
+          background: "linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%)",
+          color: "#7b8798",
+          border: "1px solid #d6dde7",
+          boxShadow: "0 1px 0 rgba(255,255,255,0.85) inset, 0 1px 4px rgba(15,23,42,0.04)"
+        }
+      : {
+          background: "linear-gradient(180deg, #f0f7f2 0%, #e5f0e8 100%)",
+          color: "#2f6c4b",
+          border: "1px solid #cbded1",
+          boxShadow: "0 1px 0 rgba(255,255,255,0.8) inset, 0 2px 6px rgba(47,108,75,0.06)"
+        };
 
   return (
     <div
@@ -87,13 +114,13 @@ export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
             <div
               style={{
                 fontSize: crampedEditor ? 11.5 : 12,
-                color: savedState ? "#7b8798" : "#738094",
+                color: emptyPristine ? "#8c97a8" : savedState ? "#7b8798" : "#738094",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis"
               }}
             >
-              {model.dirty ? "Draft not saved yet" : "All changes saved"}
+              {statusText}
             </div>
             {!compactToolbar && (
               <div
@@ -128,17 +155,15 @@ export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
           width: stackedToolbar ? 60 : crampedEditor ? Math.min(reservedSaveWidth, 76) : reservedSaveWidth,
           height: saveRect.height,
           borderRadius: 999,
-          background: model.dirty ? "#e95420" : "linear-gradient(180deg, #f0f7f2 0%, #e5f0e8 100%)",
-          color: model.dirty ? "#ffffff" : "#2f6c4b",
+          background: saveButtonStyle.background,
+          color: saveButtonStyle.color,
           fontSize: crampedEditor ? 11.5 : compactToolbar ? 12 : 13,
           fontWeight: 700,
-          border: model.dirty ? "none" : "1px solid #cbded1",
+          border: saveButtonStyle.border,
           cursor: "pointer",
           padding: "0 10px",
           pointerEvents: "auto",
-          boxShadow: model.dirty
-            ? "0 1px 0 rgba(255,255,255,0.22) inset, 0 6px 14px rgba(233,84,32,0.18)"
-            : "0 1px 0 rgba(255,255,255,0.8) inset, 0 2px 6px rgba(47,108,75,0.06)"
+          boxShadow: saveButtonStyle.boxShadow
         }}
       >
         {ultraCompactToolbar ? "Save" : "Save"}
@@ -207,7 +232,7 @@ export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
             width: editorRect.width,
             height: editorRect.height,
             fontFamily: '"Ubuntu Mono", ui-monospace, monospace',
-            fontSize: crampedEditor ? 12 : narrowEditor ? 13 : compactToolbar ? 14 : 15,
+            fontSize: editorFontSize,
             color: "#1f2937",
             background:
               savedState
@@ -220,7 +245,7 @@ export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
             const lineRect = layout.lineRects[index];
             const linesBeforeThis = model.lines.slice(0, index).join("\n").length + (index > 0 ? 1 : 0);
             const lineEnd = linesBeforeThis + line.length;
-            const cursorOnThisLine = model.cursorIndex >= linesBeforeThis && model.cursorIndex <= lineEnd;
+            const cursorOnThisLine = focused && model.cursorIndex >= linesBeforeThis && model.cursorIndex <= lineEnd;
             const cursorCol = cursorOnThisLine ? model.cursorIndex - linesBeforeThis : -1;
             return (
               <div
@@ -241,7 +266,16 @@ export function NoteEditorBody({ model, windowBounds }: NoteEditorBodyProps) {
                   whiteSpace: "pre"
                 }}
               >
-                <div style={{ width: "100%", height: "100%", overflow: "hidden", whiteSpace: "pre", letterSpacing: crampedEditor ? -0.1 : 0 }}>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    overflow: "hidden",
+                    whiteSpace: "pre",
+                    textOverflow: "clip",
+                    letterSpacing: crampedEditor ? -0.15 : narrowEditor ? -0.08 : 0
+                  }}
+                >
                   {cursorOnThisLine ? (
                     <>
                       <span>{line.slice(0, cursorCol)}</span>

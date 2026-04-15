@@ -5,11 +5,6 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { chromium } from "playwright";
-import {
-  BROWSER_HELP_TOPICS,
-  getBrowserTask,
-  getBrowserTaskCategory
-} from "../../../core/src/browser-fixtures.js";
 import type { A11yNode, RenderModel, StepResult } from "../../../core/src/types.js";
 
 type CallToolResult = {
@@ -38,8 +33,6 @@ type HiddenState = {
   };
   targets: {
     targetFileId?: string;
-    targetCategoryId?: string;
-    targetBrowserTaskId?: string;
     targetMessageId?: string;
     targetCommand?: string;
     targetCommandOutput?: string;
@@ -49,8 +42,6 @@ type HiddenState = {
 };
 
 const TASK_IDS = {
-  browserWorkflow: "browser_log_task_preopen_note_hard",
-  browserHelp: "browser_help_preopen_note_distractors",
   mail: "mail_extract_mock_note",
   terminal: "terminal_record_working_directory"
 } as const;
@@ -129,10 +120,6 @@ function getTargetFileName(hidden: HiddenState) {
   return targetFile.name;
 }
 
-function getBrowserHelpTopicByLine(line: string) {
-  return BROWSER_HELP_TOPICS.find((topic) => topic.lines.includes(line));
-}
-
 function getTargetMessageSubject(hidden: HiddenState) {
   const targetMessageId = hidden.targets.targetMessageId;
   if (!targetMessageId) {
@@ -192,200 +179,6 @@ async function waitForObservedNode(
     await waitForUi(page, delayMs);
   }
   throw new Error("Required a11y node not found.");
-}
-
-async function scenarioBrowserWorkflow(client: Client, page: import("playwright").Page, sessionId: string) {
-  const reset = await callTool<StepResult>(client, "trainer.reset", {
-    sessionId,
-    taskId: TASK_IDS.browserWorkflow,
-    seed: 0
-  });
-  const hidden = await getHiddenState(client, sessionId);
-  const targetFileName = getTargetFileName(hidden);
-  const targetCategory = getBrowserTaskCategory(hidden.targets.targetCategoryId ?? "");
-  const targetTask = getBrowserTask(hidden.targets.targetCategoryId ?? "", hidden.targets.targetBrowserTaskId ?? "");
-  const appendText = hidden.targets.appendText ?? targetTask.id;
-  const expectedSavedContent = hidden.targets.expectedSavedContent ?? appendText;
-
-  await page.goto(reset.observation.viewerUrl!, { waitUntil: "domcontentloaded" });
-  await waitForUi(page, 350);
-  const artifacts: string[] = [];
-  artifacts.push(await screenshot(page, "browser-workflow-reset"));
-
-  const explorerTab = findNode(
-    reset.observation.a11yTree,
-    (node) => node.role === "button" && node.name === "Task Board"
-  );
-  await page.mouse.click(
-    explorerTab.bounds.x + Math.round(explorerTab.bounds.width / 2),
-    explorerTab.bounds.y + Math.round(explorerTab.bounds.height / 2)
-  );
-  await waitForUi(page, 300);
-
-  const { node: workflowNode } = await waitForObservedNode(
-    client,
-    page,
-    sessionId,
-    (node) => node.role === "listitem" && node.name === targetCategory.label
-  );
-  await page.mouse.click(
-    workflowNode.bounds.x + Math.round(workflowNode.bounds.width / 2),
-    workflowNode.bounds.y + Math.round(workflowNode.bounds.height / 2)
-  );
-  await waitForUi(page, 300);
-  const { node: taskOneNode } = await waitForObservedNode(
-    client,
-    page,
-    sessionId,
-    (node) => node.role === "listitem" && node.name === targetTask.title
-  );
-  await page.mouse.click(
-    taskOneNode.bounds.x + Math.round(taskOneNode.bounds.width / 2),
-    taskOneNode.bounds.y + Math.round(taskOneNode.bounds.height / 2)
-  );
-  await waitForUi(page, 300);
-  artifacts.push(await screenshot(page, "browser-workflow-selected"));
-
-  const textBox = await focusNoteTextboxByIcon(client, page, sessionId, targetFileName);
-  await page.mouse.click(textBox.bounds.x + textBox.bounds.width - 12, textBox.bounds.y + textBox.bounds.height - 12);
-  await waitForUi(page, 250);
-  await page.keyboard.type(appendText, { delay: 30 });
-  await waitForUi(page, 300);
-  artifacts.push(await screenshot(page, "browser-workflow-typed"));
-
-  await page.getByRole("button", { name: "Save" }).click();
-  await waitForUi(page, 320);
-  artifacts.push(await screenshot(page, "browser-workflow-saved"));
-
-  const render = await fetchRenderModel(reset.observation.viewerUrl!, sessionId);
-  const noteWindow = render.windows.find(
-    (window) => window.title === targetFileName && window.appView.type === "note-editor"
-  );
-  const joined =
-    noteWindow && noteWindow.appView.type === "note-editor" ? noteWindow.appView.lines.join("\n") : null;
-
-  const final = await callTool<StepResult>(client, "computer13.step", {
-    sessionId,
-    action: { type: "DONE" }
-  });
-
-  return {
-    name: "browser-workflow-task-id",
-    passed:
-      joined === expectedSavedContent &&
-      final.terminated &&
-      !final.truncated &&
-      final.cumulativeReward > 0,
-    details: {
-      targetCategory: targetCategory.label,
-      targetTaskTitle: targetTask.title,
-      targetTaskId: targetTask.id,
-      joined,
-      finalReward: final.cumulativeReward,
-      screenshotPath: final.observation.screenshotPath,
-      artifacts
-    }
-  } satisfies QaScenarioResult;
-}
-
-async function scenarioBrowserHelp(client: Client, page: import("playwright").Page, sessionId: string) {
-  const reset = await callTool<StepResult>(client, "trainer.reset", {
-    sessionId,
-    taskId: TASK_IDS.browserHelp,
-    seed: 0
-  });
-  const hidden = await getHiddenState(client, sessionId);
-  const targetFileName = getTargetFileName(hidden);
-  const appendText = hidden.targets.appendText ?? "";
-  const expectedSavedContent = hidden.targets.expectedSavedContent ?? appendText;
-  const topic = getBrowserHelpTopicByLine(appendText);
-
-  await page.goto(reset.observation.viewerUrl!, { waitUntil: "domcontentloaded" });
-  await waitForUi(page, 350);
-  const artifacts: string[] = [];
-  artifacts.push(await screenshot(page, "browser-help-reset"));
-
-  const { node: explorerTab } = await waitForObservedNode(
-    client,
-    page,
-    sessionId,
-    (node) => node.role === "button" && node.name === "Task Board"
-  );
-  await page.mouse.click(
-    explorerTab.bounds.x + Math.round(explorerTab.bounds.width / 2),
-    explorerTab.bounds.y + Math.round(explorerTab.bounds.height / 2)
-  );
-  await waitForUi(page, 300);
-
-  const { node: docsBookmark } = await waitForObservedNode(
-    client,
-    page,
-    sessionId,
-    (node) => node.role === "listitem" && node.name === "Ubuntu Docs"
-  );
-  await page.mouse.click(
-    docsBookmark.bounds.x + Math.round(docsBookmark.bounds.width / 2),
-    docsBookmark.bounds.y + Math.round(docsBookmark.bounds.height / 2)
-  );
-  await waitForUi(page, 300);
-  artifacts.push(await screenshot(page, "browser-help-tab"));
-
-  if (topic) {
-    const { node: topicNode } = await waitForObservedNode(
-      client,
-      page,
-      sessionId,
-      (node) => node.role === "listitem" && node.name === topic.title
-    );
-    await page.mouse.click(topicNode.bounds.x + Math.round(topicNode.bounds.width / 2), topicNode.bounds.y + 18);
-    await waitForUi(page, 250);
-  }
-
-  const observed = await observe(client, sessionId);
-  const helpLine = findNode(
-    observed.observation.a11yTree,
-    (node) => node.role === "label" && node.text === appendText
-  );
-  await page.mouse.click(helpLine.bounds.x + 12, helpLine.bounds.y + Math.round(helpLine.bounds.height / 2));
-  await waitForUi(page, 200);
-  await page.keyboard.press("Control+C");
-  await waitForUi(page, 240);
-
-  const textBox = await focusNoteTextboxByIcon(client, page, sessionId, targetFileName);
-  await page.mouse.click(textBox.bounds.x + 10, textBox.bounds.y + 10);
-  await waitForUi(page, 250);
-  await page.keyboard.press("Control+V");
-  await waitForUi(page, 300);
-  artifacts.push(await screenshot(page, "browser-help-typed"));
-
-  await page.getByRole("button", { name: "Save" }).click();
-  await waitForUi(page, 320);
-  artifacts.push(await screenshot(page, "browser-help-saved"));
-
-  const render = await fetchRenderModel(reset.observation.viewerUrl!, sessionId);
-  const noteWindow = render.windows.find(
-    (window) => window.title === targetFileName && window.appView.type === "note-editor"
-  );
-  const joined =
-    noteWindow && noteWindow.appView.type === "note-editor" ? noteWindow.appView.lines.join("\n") : null;
-
-  const final = await callTool<StepResult>(client, "computer13.step", {
-    sessionId,
-    action: { type: "DONE" }
-  });
-
-  return {
-    name: "browser-help-line-capture",
-    passed: joined === expectedSavedContent && final.terminated && !final.truncated,
-    details: {
-      targetFileName,
-      appendText,
-      joined,
-      finalReward: final.cumulativeReward,
-      screenshotPath: final.observation.screenshotPath,
-      artifacts
-    }
-  } satisfies QaScenarioResult;
 }
 
 async function scenarioMail(client: Client, page: import("playwright").Page, sessionId: string) {
@@ -597,8 +390,6 @@ async function main() {
     const created = await callTool<{ sessionId: string; viewerUrl: string }>(client, "trainer.create_session", {});
     const sessionId = created.sessionId;
 
-    results.push(await scenarioBrowserWorkflow(client, page, sessionId));
-    results.push(await scenarioBrowserHelp(client, page, sessionId));
     results.push(await scenarioMail(client, page, sessionId));
     results.push(await scenarioTerminal(client, page, sessionId));
 

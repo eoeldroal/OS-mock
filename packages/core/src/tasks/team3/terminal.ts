@@ -2,6 +2,33 @@ import type { TaskSpec, Viewport } from "../../types.js";
 import { buildCatTerminalTask, buildLsTerminalTask, buildPwdTerminalTask } from "../scenario-builders.js";
 import { TEAM3_TERMINAL_DOMAIN, createTeam3File, createTeam3NoteTarget, defineTeam3Task } from "./shared.js";
 
+function createTerminalWorkspaceCompanion(
+  noteTarget: ReturnType<typeof createTeam3NoteTarget>,
+  history: string[],
+  currentDirectory = "/workspace"
+) {
+  return {
+    noteWindow: {
+      ...noteTarget,
+      preopen: true,
+      windowId: "notes-target",
+      bounds: { x: 920, y: 84, width: 348, height: 412 },
+      focused: false,
+      minimized: false
+    },
+    explorerWindow: {
+      windowId: "explorer-main",
+      bounds: { x: 78, y: 112, width: 336, height: 462 },
+      currentPlace: "workspace" as const,
+      currentDirectory,
+      selectedFileId: noteTarget.fileId,
+      focused: false,
+      minimized: false
+    },
+    history
+  };
+}
+
 export const terminalListDirTask: TaskSpec = defineTeam3Task({
   id: "terminal_list_directory_contents",
   split: "starter",
@@ -48,13 +75,15 @@ export const team3TerminalRecordWorkingDirectoryTask: TaskSpec = defineTeam3Task
       "/var/www/html/public/assets"
     ];
     const cwd = paths[seed % paths.length];
+    const noteTarget = createTeam3NoteTarget("team3-t3-cwd-note", "cwd_log.txt");
 
     return buildPwdTerminalTask({
       instruction:
         "Open Terminal, execute the command to print the current working directory, and save the absolute path to 'cwd_log.txt'.",
       viewport,
       cwd,
-      noteTarget: createTeam3NoteTarget("team3-t3-cwd-note", "cwd_log.txt")
+      noteTarget,
+      ...createTerminalWorkspaceCompanion(noteTarget, ["ls", "echo $SHELL", "whoami"])
     });
   }
 });
@@ -74,6 +103,7 @@ export const terminalCatAndSaveConfigTask: TaskSpec = defineTeam3Task({
     ];
     const variant = configs[seed % configs.length];
     const cwd = "/home/user";
+    const noteTarget = createTeam3NoteTarget("team3-t4-port-note", "port_backup.txt");
     const sourceFile = createTeam3File(
       "team3-t4-conf",
       "server_config.json",
@@ -87,7 +117,8 @@ export const terminalCatAndSaveConfigTask: TaskSpec = defineTeam3Task({
           "Open Terminal, use the 'cat' command to read 'server_config.json', and copy the port number into a note named 'port_backup.txt'. Save the note.",
         viewport,
         cwd,
-        noteTarget: createTeam3NoteTarget("team3-t4-port-note", "port_backup.txt")
+        noteTarget,
+        ...createTerminalWorkspaceCompanion(noteTarget, ["ls", "pwd", "echo ready"])
       },
       sourceFile,
       variant.port
@@ -239,14 +270,15 @@ export const terminalRecordDeepPwdTask: TaskSpec = defineTeam3Task({
       { path: "/opt/services/os-mock/dist/lib", history: ["cd /opt", "ls -la", "cd services/os-mock/dist/lib", "node server.js"] }
     ];
     const variant = paths[seed % paths.length];
+    const noteTarget = createTeam3NoteTarget("team3-t15-deep-note", "current_path.txt");
 
     return buildPwdTerminalTask({
       instruction:
         "Open Terminal, run 'pwd', and save the absolute path into a note named 'current_path.txt'.",
       viewport,
       cwd: variant.path,
-      noteTarget: createTeam3NoteTarget("team3-t15-deep-note", "current_path.txt"),
-      history: variant.history
+      noteTarget,
+      ...createTerminalWorkspaceCompanion(noteTarget, variant.history, "/workspace")
     });
   }
 });

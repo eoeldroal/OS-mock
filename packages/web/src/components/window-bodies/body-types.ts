@@ -16,6 +16,7 @@ export type WindowBounds = {
 export type WindowBodyProps<T> = {
   model: T;
   windowBounds: WindowBounds;
+  focused?: boolean;
 };
 
 export type FileExplorerBodyProps = WindowBodyProps<FileExplorerViewModel>;

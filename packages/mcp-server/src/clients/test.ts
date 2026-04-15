@@ -3,7 +3,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { BROWSER_HELP_TOPICS, getBrowserTask, getBrowserTaskCategory } from "../../../core/src/browser-fixtures.js";
 import type { A11yNode, Computer13Action, StepResult } from "../../../core/src/types.js";
 
 type CliOptions = {
@@ -33,8 +32,6 @@ type HiddenState = {
   };
   targets: {
     targetFileId?: string;
-    targetCategoryId?: string;
-    targetBrowserTaskId?: string;
     targetMessageId?: string;
     targetCommand?: string;
     targetCommandOutput?: string;
@@ -142,10 +139,6 @@ function getTargetFileName(hidden: HiddenState) {
     throw new Error(`Target file ${targetFileId} was not found in hidden filesystem state.`);
   }
   return targetFile.name;
-}
-
-function getBrowserHelpTopicByLine(line: string) {
-  return BROWSER_HELP_TOPICS.find((topic) => topic.lines.includes(line));
 }
 
 function matchesMailMessageSubject(node: A11yNode, subject: string) {
@@ -413,83 +406,6 @@ async function solveTaskThroughMcp(
     case "minimize_recover_and_save": {
       const recoverIcon = findNode(nodes(), (node) => node.role === "icon" && node.name === "recover.txt");
       await step({ type: "CLICK", ...center(recoverIcon.bounds) });
-      await step({ type: "HOTKEY", keys: ["ctrl", "s"] });
-      return step({ type: "DONE" });
-    }
-    case "browser_log_workflow_task_id":
-    case "browser_log_task_preopen_note_hard": {
-      const hidden = await getHiddenState();
-      const targetCategory = getBrowserTaskCategory(hidden.targets.targetCategoryId ?? "");
-      const targetTask = getBrowserTask(hidden.targets.targetCategoryId ?? "", hidden.targets.targetBrowserTaskId ?? "");
-      const targetFileName = getTargetFileName(hidden);
-      const appendText = hidden.targets.appendText ?? targetTask.id;
-
-      const explorerTab = findNode(nodes(), (node) => node.role === "button" && node.name === "Task Board");
-      await step({ type: "CLICK", ...center(explorerTab.bounds) });
-
-      await observe();
-      const categoryNode = findNode(
-        nodes(),
-        (node) => node.role === "listitem" && node.name === targetCategory.label
-      );
-      await step({ type: "CLICK", ...center(categoryNode.bounds) });
-
-      await observe();
-      const taskNode = findNode(nodes(), (node) => node.role === "listitem" && node.name === targetTask.title);
-      await step({ type: "CLICK", ...center(taskNode.bounds) });
-
-      await observe();
-      let noteTarget = findTextboxOrFocusByIcon(nodes(), targetFileName);
-      if (noteTarget.icon) {
-        await step({ type: "CLICK", ...center(noteTarget.icon.bounds) });
-        await observe();
-        noteTarget = findTextboxOrFocusByIcon(nodes(), targetFileName);
-      }
-      const noteBox = noteTarget.textbox ?? findNode(nodes(), (node) => node.role === "textbox" && node.name === targetFileName);
-      await step({
-        type: "CLICK",
-        x: noteBox.bounds.x + noteBox.bounds.width - 8,
-        y: noteBox.bounds.y + noteBox.bounds.height - 8
-      });
-      await step({ type: "TYPING", text: appendText });
-      await step({ type: "HOTKEY", keys: ["ctrl", "s"] });
-      return step({ type: "DONE" });
-    }
-    case "browser_capture_help_line":
-    case "browser_help_preopen_note_distractors": {
-      const hidden = await getHiddenState();
-      const appendText = hidden.targets.appendText ?? "";
-      const targetFileName = getTargetFileName(hidden);
-      const topic = getBrowserHelpTopicByLine(appendText);
-
-      const explorerTab = findNode(nodes(), (node) => node.role === "button" && node.name === "Task Board");
-      await step({ type: "CLICK", ...center(explorerTab.bounds) });
-
-      await observe();
-      const docsBookmark = findNode(nodes(), (node) => node.role === "listitem" && node.name === "Ubuntu Docs");
-      await step({ type: "CLICK", ...center(docsBookmark.bounds) });
-
-      if (topic) {
-        await observe();
-        const topicNode = findNode(nodes(), (node) => node.role === "listitem" && node.name === topic.title);
-        await step({ type: "CLICK", ...center(topicNode.bounds) });
-      }
-
-      await observe();
-      const helpLine = findNode(nodes(), (node) => node.role === "label" && node.text === appendText);
-      await step({ type: "CLICK", x: helpLine.bounds.x + 12, y: helpLine.bounds.y + Math.round(helpLine.bounds.height / 2) });
-      await step({ type: "HOTKEY", keys: ["ctrl", "c"] });
-
-      await observe();
-      let noteTarget = findTextboxOrFocusByIcon(nodes(), targetFileName);
-      if (noteTarget.icon) {
-        await step({ type: "CLICK", ...center(noteTarget.icon.bounds) });
-        await observe();
-        noteTarget = findTextboxOrFocusByIcon(nodes(), targetFileName);
-      }
-      const noteBox = noteTarget.textbox ?? findNode(nodes(), (node) => node.role === "textbox" && node.name === targetFileName);
-      await step({ type: "CLICK", x: noteBox.bounds.x + 12, y: noteBox.bounds.y + 12 });
-      await step({ type: "HOTKEY", keys: ["ctrl", "v"] });
       await step({ type: "HOTKEY", keys: ["ctrl", "s"] });
       return step({ type: "DONE" });
     }
