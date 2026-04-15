@@ -191,17 +191,6 @@ export type FileExplorerState = {
   };
 };
 
-export type NoteEditorState = {
-  id: string;
-  fileId: string;
-  buffer: string;
-  cursorIndex: number;
-  selectedLineIndex?: number;
-  dirty: boolean;
-  undoStack: Array<{ buffer: string; cursorIndex: number }>;
-  redoStack: Array<{ buffer: string; cursorIndex: number }>;
-};
-
 export type BrowserBookmark = {
   id: string;
   label: string;
@@ -231,6 +220,17 @@ export type BrowserHelpTopic = {
   id: string;
   title: string;
   lines: string[];
+};
+
+export type NoteEditorState = {
+  id: string;
+  fileId: string;
+  buffer: string;
+  cursorIndex: number;
+  selectedLineIndex?: number;
+  dirty: boolean;
+  undoStack: Array<{ buffer: string; cursorIndex: number }>;
+  redoStack: Array<{ buffer: string; cursorIndex: number }>;
 };
 
 export type BrowserLiteState = {
@@ -269,6 +269,13 @@ export type BrowserSurfaceViewModel = {
   width: number;
   height: number;
 };
+
+export type BrowserContentInput =
+  | { kind: "click" | "double_click"; x: number; y: number }
+  | { kind: "scroll"; x: number; y: number; dx: number; dy: number }
+  | { kind: "type"; text: string }
+  | { kind: "press"; key: string }
+  | { kind: "hotkey"; keys: string[] };
 
 export type TerminalLiteState = {
   id: string;
@@ -319,7 +326,9 @@ export type TaskbarItem = {
   appId: string;
   pinned: boolean;
   running: boolean;
+  minimized: boolean;
   iconLabel: string;
+  badgeLabel?: string;
   bounds: Rect;
 };
 
@@ -328,6 +337,8 @@ export type DesktopIcon = {
   label: string;
   appId?: string;
   action?: string;
+  place?: FileSystemPlace;
+  directory?: string;
   position: Point;
   bounds: Rect;
 };
@@ -344,12 +355,22 @@ export type PopupViewModel = {
 export type FileExplorerLayout = {
   sidebarBounds: Rect;
   sidebarItemRects: Rect[];
+  sidebarFavoritesHeadingBounds?: Rect;
+  sidebarFavoriteItemRects: Rect[];
+  sidebarStorageHeadingBounds?: Rect;
+  sidebarStorageItemRects: Rect[];
+  sidebarSummaryBounds?: Rect;
   mainBounds: Rect;
   toolbarBounds: Rect;
   backButtonBounds: Rect;
   listBounds: Rect;
+  listHeaderBounds: Rect;
+  listViewportBounds: Rect;
+  listFooterBounds: Rect;
   fileRowRects: Rect[];
   renameHintBounds: Rect;
+  compactRows: boolean;
+  stackedRows: boolean;
 };
 
 export type FileExplorerViewModel = {
@@ -357,6 +378,7 @@ export type FileExplorerViewModel = {
   selectedFileId?: string;
   currentPlace: FileSystemPlace;
   currentDirectory: string;
+  places: FileSystemPlace[];
   renameMode?: FileExplorerState["renameMode"];
   files: FileEntry[];
   /** Single-source-of-truth layout — both hit-testing and rendering use these rects */
@@ -599,6 +621,7 @@ export type PredicateId =
   | "browser.osworld_opened"
   | "browser.help_page_opened"
   | "browser.help_topic_opened"
+  | "browser.url_matches"
   | "mail.message_opened"
   | "terminal.command_ran"
   | "terminal.multi_commands_ran"

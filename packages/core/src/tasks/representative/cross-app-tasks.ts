@@ -11,10 +11,10 @@ import { explorerBounds, mailAuditBounds, mailAuditExplorerBounds } from "./shar
 const implementationPath = "packages/core/src/tasks/representative/cross-app-tasks.ts";
 
 function buildMailExtractTask(_seed: number, viewport: Viewport) {
-  const reminderLine = "Remember to test perturbations while the viewer is open.";
+  const reminderLine = "Please confirm the loading dock booking before 4 PM.";
   const mailScenario = createMailScenario({
     instruction:
-      "In Thunderbird, open the Workspace notes message, record its reminder sentence in mail-log.txt, and save.",
+      "In Thunderbird, open the Loading dock reminder message, record its reminder sentence in mail-log.txt, and save.",
     viewport,
     noteTarget: {
       fileId: "file-mail-log",
@@ -24,13 +24,14 @@ function buildMailExtractTask(_seed: number, viewport: Viewport) {
     noteWindow: false,
     explorerWindow: {
       windowId: "explorer-main",
-      bounds: mailAuditExplorerBounds(),
+      bounds: { x: 92, y: 84, width: 300, height: 520 },
       focused: false,
       minimized: false
     },
     mailWindow: {
       windowId: "mail-main",
-      bounds: mailAuditBounds(),
+      // Keep enough space on the right so the note opens beside mail instead of over it.
+      bounds: { x: 412, y: 84, width: 484, height: 548 },
       focused: true,
       minimized: false
     },
@@ -50,10 +51,10 @@ function buildMailExtractTask(_seed: number, viewport: Viewport) {
       {
         id: "msg-2",
         folderId: "inbox",
-        sender: "ops@osmock.local",
-        subject: "Workspace notes",
+        sender: "facilities@osmock.local",
+        subject: "Loading dock reminder",
         preview: reminderLine,
-        body: ["Workspace notes", "", reminderLine]
+        body: ["Loading dock reminder", "", reminderLine]
       }
     ]
   });
@@ -100,7 +101,7 @@ function buildTerminalRecordTask(_seed: number, viewport: Viewport) {
 const CROSS_APP_TASKS = [
   {
     id: "mail_extract_mock_note",
-    instruction: "Open the Workspace notes email, copy its reminder line into mail-log.txt, and save.",
+    instruction: "Open the Loading dock reminder email, copy its reminder line into mail-log.txt, and save.",
     domain: "Thunderbird",
     split: "representative",
     maxSteps: 96,

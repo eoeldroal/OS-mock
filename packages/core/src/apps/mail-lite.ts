@@ -56,6 +56,22 @@ function normalizeMailState(state: MailLiteState): MailLiteState {
   };
 }
 
+function getVisibleFolderRects(layout: ReturnType<typeof getMailLiteLayout>) {
+  const compactFolderList = layout.sidebarBounds.width < 190;
+  const paneTop = compactFolderList ? 90 : 112;
+  return layout.folderRects.map((rect) => ({
+    ...rect,
+    y: layout.sidebarBounds.y + paneTop + (rect.y - layout.sidebarBounds.y + 14 - 36)
+  }));
+}
+
+function getVisibleMessageRects(layout: ReturnType<typeof getMailLiteLayout>) {
+  return layout.messageRects.map((rect) => ({
+    ...rect,
+    y: rect.y + 20
+  }));
+}
+
 export function handleMailAction(
   state: EnvState,
   window: WindowInstance,
@@ -65,13 +81,15 @@ export function handleMailAction(
 ): AppActionResult | null {
   const stableMail = normalizeMailState(mail);
   const layout = getMailLiteLayout(window.bounds, stableMail);
+  const visibleFolderRects = getVisibleFolderRects(layout);
+  const visibleMessageRects = getVisibleMessageRects(layout);
 
   if (action.type === "CLICK") {
     let handled = false;
     const next = produce(state, (draft) => {
       const nextMail = draft.appStates.mailLite[window.id];
 
-      const clickedFolderIndex = layout.folderRects.findIndex((rect) => pointInRect(point, rect));
+      const clickedFolderIndex = visibleFolderRects.findIndex((rect) => pointInRect(point, rect));
       if (clickedFolderIndex >= 0) {
         const folder = nextMail.folders[clickedFolderIndex];
         nextMail.selectedFolder = folder.id;
@@ -84,7 +102,7 @@ export function handleMailAction(
       }
 
       const visibleMessages = getVisibleMailMessages(nextMail);
-      const clickedMessageIndex = layout.messageRects.findIndex((rect) => pointInRect(point, rect));
+      const clickedMessageIndex = visibleMessageRects.findIndex((rect) => pointInRect(point, rect));
       if (clickedMessageIndex >= 0 && visibleMessages[clickedMessageIndex]) {
         const message = visibleMessages[clickedMessageIndex];
         nextMail.selectedMessageId = message.id;
@@ -159,6 +177,8 @@ export function handleMailAction(
 
 export function getMailLiteLayout(bounds: Rect, state: MailLiteState) {
   const PREVIEW_HEADER_ZONE = 86;
+  const FOLDER_ROW_HEIGHT = 52;
+  const FOLDER_ROW_GAP = 8;
   const headerBounds = {
     x: bounds.x,
     y: bounds.y,
@@ -212,9 +232,9 @@ export function getMailLiteLayout(bounds: Rect, state: MailLiteState) {
     previewBounds,
     folderRects: state.folders.map((_, index) => ({
       x: sidebarBounds.x + 10,
-      y: sidebarBounds.y + index * 38 + 10,
+      y: sidebarBounds.y + index * (FOLDER_ROW_HEIGHT + FOLDER_ROW_GAP) + 10,
       width: sidebarBounds.width - 20,
-      height: 30
+      height: FOLDER_ROW_HEIGHT
     })),
     messageRects: visibleMessages.map((_, index) => ({
       x: messagesBounds.x + 10,
@@ -252,6 +272,8 @@ export const mailLitePlugin: AppPlugin<MailLiteState> = {
   buildA11y(state, ctx: BuildContext) {
     const stableMail = normalizeMailState(state);
     const nextLayout = getMailLiteLayout(ctx.window.bounds, stableMail);
+    const visibleFolderRects = getVisibleFolderRects(nextLayout);
+    const visibleMessageRects = getVisibleMessageRects(nextLayout);
     const selectedMessage =
       stableMail.messages.find((message) => message.id === stableMail.selectedMessageId) ?? nextLayout.visibleMessages[0];
     return [
@@ -279,7 +301,7 @@ export const mailLitePlugin: AppPlugin<MailLiteState> = {
               role: "listitem",
               name: folder.name,
               text: folder.unread > 0 ? `${folder.unread} unread` : "No unread messages",
-              bounds: nextLayout.folderRects[index],
+              bounds: visibleFolderRects[index],
               visible: true,
               enabled: true,
               focusable: true,
@@ -301,7 +323,7 @@ export const mailLitePlugin: AppPlugin<MailLiteState> = {
               role: "listitem",
               name: `${message.sender} - ${message.subject}`,
               text: message.preview,
-              bounds: nextLayout.messageRects[index],
+              bounds: visibleMessageRects[index],
               visible: true,
               enabled: true,
               focusable: true,

@@ -6,6 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { chromium } from "playwright";
 import type { StepResult } from "../../../core/src/types.js";
+import { DEFAULT_BROWSER_EXTERNAL_BODY_MARKER } from "../../../core/src/apps/browser-defaults.js";
 
 type CallToolResult = {
   content?: Array<{ type?: string; text?: string }>;
@@ -88,7 +89,7 @@ async function main() {
 
     await callTool<StepResult>(client, "trainer.reset", {
       sessionId: a.sessionId,
-      taskId: "browser_capture_help_line",
+      taskId: "browser_open_briefing_heading_to_note",
       seed: 0,
       maxSteps: 0
     });
@@ -102,7 +103,7 @@ async function main() {
     await pageA.goto(a.viewerUrl, { waitUntil: "domcontentloaded" });
     await pageB.goto(b.viewerUrl, { waitUntil: "domcontentloaded" });
 
-    await waitForReady(pageA, "browser_capture_help_line", a.sessionId);
+    await waitForReady(pageA, "browser_open_briefing_heading_to_note", a.sessionId);
     await waitForReady(pageB, "terminal_record_working_directory", b.sessionId);
 
     const shots: string[] = [];
@@ -111,7 +112,7 @@ async function main() {
 
     await callTool<StepResult>(client, "trainer.reset", {
       sessionId: a.sessionId,
-      taskId: "browser_capture_help_line",
+      taskId: "browser_open_briefing_heading_to_note",
       seed: 1,
       maxSteps: 0
     });
@@ -125,7 +126,7 @@ async function main() {
     await pageA.reload({ waitUntil: "domcontentloaded" });
     await pageB.reload({ waitUntil: "domcontentloaded" });
 
-    await waitForReady(pageA, "browser_capture_help_line", a.sessionId);
+    await waitForReady(pageA, "browser_open_briefing_heading_to_note", a.sessionId);
     await waitForReady(pageB, "terminal_record_working_directory", b.sessionId);
 
     shots.push(await screenshot(pageA, "session-a-browser-reloaded"));
@@ -138,10 +139,10 @@ async function main() {
 
     const passed =
       titleA.includes(a.sessionId) &&
-      titleA.includes("browser_capture_help_line") &&
+      titleA.includes("browser_open_briefing_heading_to_note") &&
       titleB.includes(b.sessionId) &&
       titleB.includes("terminal_record_working_directory") &&
-      bodyA.includes("Google") &&
+      bodyA.includes(DEFAULT_BROWSER_EXTERNAL_BODY_MARKER) &&
       bodyB.includes("Terminal");
 
     const report = {

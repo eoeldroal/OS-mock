@@ -13,7 +13,10 @@ import type {
 import { produce, setAutoFreeze } from "immer";
 import { nextZIndex } from "../system/window-manager.js";
 import { createEmptyFileSystemState, createFileEntry, getFileEntry, insertFileEntry } from "../system/filesystem.js";
-import { BROWSER_BOOKMARKS, BROWSER_HELP_TOPICS, BROWSER_TASK_CATEGORIES } from "../browser-fixtures.js";
+import {
+  DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE,
+  DEFAULT_BROWSER_EXTERNAL_PAGE_URL
+} from "../apps/browser-defaults.js";
 
 // Disable auto-freeze so task setup functions can mutate state returned by produce.
 // Freezing is a dev-time safety net; our reducer architecture already ensures immutability.
@@ -43,6 +46,16 @@ export function createFile(
     options?.directory,
     options?.kind
   );
+}
+
+function buildMailFoldersFromMessages(
+  folders: Array<{ id: string; name: string }>,
+  messages: MailLiteState["messages"]
+): MailLiteState["folders"] {
+  return folders.map((folder) => ({
+    ...folder,
+    unread: messages.filter((message) => message.folderId === folder.id).length
+  }));
 }
 
 export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvState {
@@ -79,6 +92,8 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
         id: "desktop-home",
         label: "Home",
         appId: "file-explorer",
+        place: "Home",
+        directory: "/",
         position: { x: 100, y: 60 },
         bounds: { x: 88, y: 44, width: 72, height: 72 }
       },
@@ -86,6 +101,8 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
         id: "desktop-documents",
         label: "Documents",
         appId: "file-explorer",
+        place: "Documents",
+        directory: "/documents",
         position: { x: 100, y: 152 },
         bounds: { x: 88, y: 136, width: 88, height: 72 }
       },
@@ -93,6 +110,8 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
         id: "desktop-downloads",
         label: "Downloads",
         appId: "file-explorer",
+        place: "Downloads",
+        directory: "/downloads",
         position: { x: 100, y: 244 },
         bounds: { x: 88, y: 228, width: 88, height: 72 }
       },
@@ -100,6 +119,8 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
         id: "desktop-trash",
         label: "Trash",
         action: "open-trash",
+        place: "Desktop",
+        directory: "/desktop/Trash",
         position: { x: 100, y: 336 },
         bounds: { x: 88, y: 320, width: 72, height: 72 }
       },
@@ -107,6 +128,7 @@ export function createEmptyEnv(viewport: Viewport, instruction?: string): EnvSta
         id: "desktop-notes",
         label: "notes.txt",
         appId: "note-editor",
+        directory: "/desktop",
         position: { x: 100, y: 428 },
         bounds: { x: 88, y: 412, width: 88, height: 72 }
       }
@@ -237,23 +259,20 @@ export function addBrowserWindow(
       id: windowId,
       appName: "Mozilla Firefox",
       renderMode: "hybrid",
-      url: "https://www.google.com",
-      addressInput: "https://www.google.com",
+      url: DEFAULT_BROWSER_EXTERNAL_PAGE_URL,
+      addressInput: DEFAULT_BROWSER_EXTERNAL_PAGE_URL,
       addressBarFocused: false,
       addressReplaceOnType: false,
-      pageTitle: "Google",
+      pageTitle: DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE,
       currentPage: "external",
-      tabs: [
-        { id: `${windowId}-tab-1`, title: "Google", active: true },
-        { id: `${windowId}-tab-2`, title: "Task Board", active: false }
-      ],
-      bookmarks: structuredClone(BROWSER_BOOKMARKS),
-      categories: structuredClone(BROWSER_TASK_CATEGORIES),
+      tabs: [{ id: `${windowId}-tab-1`, title: DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE, active: true }],
+      bookmarks: [],
+      categories: [],
       selectedCategoryId: "",
       selectedTaskId: "",
-      helpTopics: structuredClone(BROWSER_HELP_TOPICS),
-      selectedHelpTopicId: BROWSER_HELP_TOPICS[0]?.id ?? "",
-      helpLines: [...(BROWSER_HELP_TOPICS[0]?.lines ?? [])],
+      helpTopics: [],
+      selectedHelpTopicId: "",
+      helpLines: [],
       lastOpenedBookmarkId: undefined,
       selectedHelpLineIndex: undefined
     };
@@ -324,47 +343,49 @@ export function addMailWindow(
         false
       )
     );
+    const defaultMessages: MailLiteState["messages"] = [
+      {
+        id: "msg-1",
+        folderId: "inbox",
+        sender: "Operations Desk",
+        subject: "Weekly office schedule",
+        preview: "Please review the updated front-desk coverage for Friday.",
+        body: [
+          "Hello team,",
+          "Please review the updated front-desk coverage for Friday.",
+          "Let me know by noon if any handoff changes are needed."
+        ]
+      },
+      {
+        id: "msg-2",
+        folderId: "inbox",
+        sender: "Facilities Team",
+        subject: "Loading dock reminder",
+        preview: "Please confirm the loading dock booking before 4 PM.",
+        body: [
+          "Hello,",
+          "Please confirm the loading dock booking before 4 PM.",
+          "Reply if the delivery window needs to move."
+        ]
+      }
+    ];
+    const defaultFolders = buildMailFoldersFromMessages(
+      [
+        { id: "inbox", name: "Inbox" },
+        { id: "drafts", name: "Drafts" },
+        { id: "sent", name: "Sent" },
+        { id: "archive", name: "Archive" }
+      ],
+      defaultMessages
+    );
+    const selectedMessage = defaultMessages.find((message) => message.id === "msg-1") ?? defaultMessages[0];
     const mailState: MailLiteState = {
       id: windowId,
       selectedFolder: "inbox",
-      folders: [
-        { id: "inbox", name: "Inbox", unread: 3 },
-        { id: "drafts", name: "Drafts", unread: 1 },
-        { id: "sent", name: "Sent", unread: 0 },
-        { id: "archive", name: "Archive", unread: 0 }
-      ],
-      messages: [
-        {
-          id: "msg-1",
-          folderId: "inbox",
-          sender: "Desktop Team",
-          subject: "Ubuntu desktop task pack",
-          preview: "Review browser, mail, terminal, and files workflow coverage.",
-          body: [
-            "Hi team,",
-            "Review browser, mail, terminal, and files workflow coverage.",
-            "This task pack covers representative desktop scenarios."
-          ]
-        },
-        {
-          id: "msg-2",
-          folderId: "inbox",
-          sender: "Research Ops",
-          subject: "Workspace notes",
-          preview: "Remember to test perturbations while the viewer is open.",
-          body: [
-            "Hi team,",
-            "Remember to test perturbations while the viewer is open.",
-            "Please keep the viewer and a11y tree aligned while validating tasks."
-          ]
-        }
-      ],
-      selectedMessageId: "msg-1",
-      previewBody: [
-        "Hi team,",
-        "Review browser, mail, terminal, and files workflow coverage.",
-        "This task pack mirrors representative OSWorld desktop scenarios."
-      ],
+      folders: defaultFolders,
+      messages: defaultMessages,
+      selectedMessageId: selectedMessage?.id ?? "",
+      previewBody: selectedMessage?.body ?? [],
       selectedPreviewLineIndex: undefined
     };
     draft.appStates.mailLite[windowId] = mailState;

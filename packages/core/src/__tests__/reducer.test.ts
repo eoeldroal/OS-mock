@@ -870,6 +870,53 @@ describe('Pointer State', () => {
   });
 });
 
+describe('Desktop icons', () => {
+  it('opens Trash in File Explorer on desktop icon double-click', () => {
+    const env = createEmptyEnv(DEFAULT_VIEWPORT, 'desktop icon test');
+    const trashIcon = env.desktopIcons.find((icon) => icon.id === 'desktop-trash');
+    if (!trashIcon) {
+      throw new Error('Missing trash desktop icon');
+    }
+
+    const result = reduceEnvState(env, {
+      type: 'DOUBLE_CLICK',
+      x: trashIcon.bounds.x + Math.round(trashIcon.bounds.width / 2),
+      y: trashIcon.bounds.y + Math.round(trashIcon.bounds.height / 2)
+    });
+
+    const explorerWindow = result.envState.windows.find((window) => window.appId === 'file-explorer');
+    expect(explorerWindow).toBeTruthy();
+    expect(result.actionAccepted).toBe(true);
+    expect(
+      explorerWindow ? result.envState.appStates.fileExplorer[explorerWindow.id]?.currentDirectory : undefined
+    ).toBe('/desktop/Trash');
+  });
+
+  it('opens notes.txt from the desktop icon and materializes the backing file', () => {
+    const env = createEmptyEnv(DEFAULT_VIEWPORT, 'desktop icon test');
+    const notesIcon = env.desktopIcons.find((icon) => icon.id === 'desktop-notes');
+    if (!notesIcon) {
+      throw new Error('Missing notes desktop icon');
+    }
+
+    const result = reduceEnvState(env, {
+      type: 'DOUBLE_CLICK',
+      x: notesIcon.bounds.x + Math.round(notesIcon.bounds.width / 2),
+      y: notesIcon.bounds.y + Math.round(notesIcon.bounds.height / 2)
+    });
+
+    const noteWindow = result.envState.windows.find((window) => window.appId === 'note-editor');
+    const noteFile = getFileByName(result.envState, 'notes.txt');
+
+    expect(noteWindow).toBeTruthy();
+    expect(result.actionAccepted).toBe(true);
+    expect(noteFile?.directory).toBe('/desktop');
+    expect(
+      noteWindow ? result.envState.appStates.noteEditor[noteWindow.id]?.fileId : undefined
+    ).toBe(noteFile?.id);
+  });
+});
+
 describe('Scrolling', () => {
   describe('note editor scrolling', () => {
     it('scrolls down in note', () => {

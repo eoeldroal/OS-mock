@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { Computer13Action, RenderModel } from "../../../core/src/types.js";
+import type {
+  BrowserContentInput,
+  BrowserLiteViewModel,
+  Computer13Action,
+  RenderModel,
+  WindowViewModel
+} from "../../../core/src/types.js";
 import { getAppMeta, ubuntuWallpaper } from "../app-assets";
 import { FloatingContextMenu } from "./FloatingContextMenu";
 import { PointerLayer } from "./PointerLayer";
@@ -9,13 +15,12 @@ import { WindowFrame } from "./WindowFrame";
 type DesktopSurfaceProps = {
   model: RenderModel;
   onAction?: (action: Computer13Action) => Promise<unknown> | void;
-  onBrowserContentAction?: (
-    windowId: string,
-    input:
-      | { kind: "click" | "double_click"; x: number; y: number }
-      | { kind: "scroll"; x: number; y: number; dx: number; dy: number }
-  ) => Promise<unknown> | void;
+  onBrowserContentAction?: (windowId: string, input: BrowserContentInput) => Promise<unknown> | void;
 };
+
+type PendingTypingTarget =
+  | { kind: "core" }
+  | { kind: "browser"; windowId: string };
 
 function pointInRect(point: { x: number; y: number }, rect: { x: number; y: number; width: number; height: number }) {
   return (
@@ -26,15 +31,40 @@ function pointInRect(point: { x: number; y: number }, rect: { x: number; y: numb
   );
 }
 
-function IndicatorDot({ active, accent }: { active: boolean; accent: string }) {
+function IndicatorDot({
+  active,
+  running,
+  minimized,
+  accent
+}: {
+  active: boolean;
+  running: boolean;
+  minimized: boolean;
+  accent: string;
+}) {
+  const width = active ? 4 : minimized ? 3.5 : running ? 3 : 2;
+  const height = active ? 18 : minimized ? 14 : running ? 8 : 5;
+  const background = active
+    ? accent
+    : minimized
+    ? `color-mix(in srgb, ${accent} 78%, white 22%)`
+    : running
+    ? "rgba(255,255,255,0.5)"
+    : "rgba(255,255,255,0.18)";
+
   return (
     <div
       style={{
-        width: active ? 4 : 3,
-        height: active ? 18 : 6,
+        width,
+        height,
         borderRadius: 99,
-        background: active ? accent : "rgba(255,255,255,0.24)",
-        boxShadow: active ? `0 0 8px ${accent}` : "none"
+        background,
+        boxShadow: active
+          ? `0 0 8px ${accent}`
+          : minimized
+          ? `0 0 10px color-mix(in srgb, ${accent} 42%, transparent)`
+          : "none",
+        opacity: running ? 1 : 0.85
       }}
     />
   );
@@ -152,12 +182,24 @@ function normalizeHotkey(event: React.KeyboardEvent<HTMLDivElement>) {
   return Array.from(keys);
 }
 
+function isHybridExternalBrowserWindow(window: WindowViewModel | undefined): window is WindowViewModel & {
+  appView: BrowserLiteViewModel;
+} {
+  return Boolean(
+    window &&
+      window.appView.type === "browser-lite" &&
+      window.appView.renderMode === "hybrid" &&
+      window.appView.currentPage === "external"
+  );
+}
+
 export function DesktopSurface({ model, onAction, onBrowserContentAction }: DesktopSurfaceProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const clickTimerRef = useRef<number | null>(null);
   const pendingClickRef = useRef<{
     fire: () => void;
     cancel: () => void;
+    settled: Promise<void>;
   } | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -166,20 +208,26 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
     lastPoint: { x: number; y: number };
     dragging: boolean;
   } | null>(null);
-  const suppressedClickRef = useRef<{
-    point: { x: number; y: number };
-    releasedAt: number;
-  } | null>(null);
   const dragDispatchChainRef = useRef<Promise<void>>(Promise.resolve());
   /** Throttle DRAG_TO to avoid HTTP queue backlog */
   const lastDragDispatchRef = useRef(0);
+  const activeHybridContentWindowIdRef = useRef<string | null>(null);
+  const pendingAddressBarFocusWindowIdRef = useRef<string | null>(null);
+  const pendingTypingRef = useRef<{
+    target: PendingTypingTarget;
+    text: string;
+  } | null>(null);
+  const pendingTypingTimerRef = useRef<number | null>(null);
+  const pendingTypingChainRef = useRef<Promise<void>>(Promise.resolve());
+  const keyDispatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const DRAG_THROTTLE_MS = 32; // ~30fps
-  const DRAG_CLICK_SUPPRESS_MS = 280;
-  const DRAG_CLICK_SUPPRESS_RADIUS = 18;
+  const TYPING_BATCH_IDLE_MS = 90;
 
   /** Stable ref for onAction so closures never go stale */
   const onActionRef = useRef(onAction);
   onActionRef.current = onAction;
+  const onBrowserContentActionRef = useRef(onBrowserContentAction);
+  onBrowserContentActionRef.current = onBrowserContentAction;
 
   const topBarClock = useMemo(() => model.topBarClock, [model.topBarClock]);
   const secondaryTopBarLabel = useMemo(() => {
@@ -205,6 +253,87 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
       return Promise.resolve();
     }
     return Promise.resolve(handler(action));
+  };
+
+  const enqueueKeyDispatch = (task: () => Promise<void> | void) => {
+    const run = async () => {
+      try {
+        await task();
+      } catch (error) {
+        console.error("desktop-surface key dispatch failed", error);
+      }
+    };
+
+    keyDispatchChainRef.current = keyDispatchChainRef.current.then(run, run);
+    return keyDispatchChainRef.current;
+  };
+
+  const sendTypingToTarget = (pending: { target: PendingTypingTarget; text: string }) => {
+    if (pending.target.kind === "browser") {
+      const handler = onBrowserContentActionRef.current;
+      if (!handler) {
+        return Promise.resolve();
+      }
+      return Promise.resolve(handler(pending.target.windowId, { kind: "type", text: pending.text }));
+    }
+    return dispatchAction({ type: "TYPING", text: pending.text });
+  };
+
+  const enqueueTypingDelivery = (pending: { target: PendingTypingTarget; text: string }) => {
+    pendingTypingChainRef.current = pendingTypingChainRef.current.then(() =>
+      sendTypingToTarget(pending).then(() => undefined)
+    );
+    return pendingTypingChainRef.current;
+  };
+
+  const clearPendingTypingTimer = () => {
+    if (pendingTypingTimerRef.current !== null) {
+      window.clearTimeout(pendingTypingTimerRef.current);
+      pendingTypingTimerRef.current = null;
+    }
+  };
+
+  const drainPendingTyping = () => {
+    clearPendingTypingTimer();
+    const pending = pendingTypingRef.current;
+    pendingTypingRef.current = null;
+    if (!pending) {
+      return pendingTypingChainRef.current;
+    }
+    return enqueueTypingDelivery(pending);
+  };
+
+  const schedulePendingTypingDrain = () => {
+    clearPendingTypingTimer();
+    pendingTypingTimerRef.current = window.setTimeout(() => {
+      void enqueueKeyDispatch(async () => {
+        await flushPendingSingleClick();
+        await drainPendingTyping();
+      });
+    }, TYPING_BATCH_IDLE_MS);
+  };
+
+  const sameTypingTarget = (left: PendingTypingTarget, right: PendingTypingTarget) =>
+    left.kind === right.kind && (left.kind !== "browser" || left.windowId === (right as { windowId: string }).windowId);
+
+  const bufferTyping = (target: PendingTypingTarget, text: string) => {
+    if (!text) {
+      return;
+    }
+
+    const pending = pendingTypingRef.current;
+    if (pending && sameTypingTarget(pending.target, target)) {
+      pending.text += text;
+      schedulePendingTypingDrain();
+      return;
+    }
+
+    if (pending) {
+      void enqueueTypingDelivery(pending);
+    }
+
+    pendingTypingRef.current = { target, text };
+    schedulePendingTypingDrain();
   };
 
   const enqueueDragAction = (action: Computer13Action) => {
@@ -233,16 +362,74 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
     return topmostWindow;
   };
 
+  const getBrowserAddressBarAtPoint = (point: { x: number; y: number }) => {
+    if (model.popups.length > 0 || model.contextMenu) {
+      return undefined;
+    }
+
+    const topmostWindow = [...model.windows]
+      .sort((left, right) => right.zIndex - left.zIndex)
+      .find(
+        (window) =>
+          !window.minimized &&
+          window.appView.type === "browser-lite" &&
+          pointInRect(point, window.bounds) &&
+          pointInRect(point, window.appView.layout.addressBarBounds)
+      );
+
+    if (!topmostWindow || topmostWindow.appView.type !== "browser-lite") {
+      return undefined;
+    }
+
+    return topmostWindow;
+  };
+
+  const getHybridBrowserById = (windowId?: string | null) => {
+    if (!windowId) {
+      return undefined;
+    }
+    const window = model.windows.find((candidate) => candidate.id === windowId);
+    if (!isHybridExternalBrowserWindow(window) || window.appView.addressBarFocused) {
+      return undefined;
+    }
+    return window;
+  };
+
+  const getHybridBrowserForKeyboard = () =>
+    getHybridBrowserById(activeHybridContentWindowIdRef.current) ?? getHybridBrowserById(model.focusedWindowId);
+
   useEffect(() => {
     rootRef.current?.focus();
 
     return () => {
+      void enqueueKeyDispatch(async () => {
+        await flushPendingSingleClick();
+        await drainPendingTyping();
+      });
+      clearPendingTypingTimer();
       if (clickTimerRef.current !== null) {
         window.clearTimeout(clickTimerRef.current);
       }
       pendingClickRef.current?.cancel();
     };
   }, []);
+
+  useEffect(() => {
+    if (!getHybridBrowserById(activeHybridContentWindowIdRef.current)) {
+      activeHybridContentWindowIdRef.current = null;
+    }
+  }, [model.windows, model.focusedWindowId]);
+
+  useEffect(() => {
+    const windowId = pendingAddressBarFocusWindowIdRef.current;
+    if (!windowId) {
+      return;
+    }
+    const browserWindow = model.windows.find((window) => window.id === windowId);
+    if (!browserWindow || browserWindow.appView.type !== "browser-lite" || !browserWindow.appView.addressBarFocused) {
+      pendingAddressBarFocusWindowIdRef.current = null;
+    }
+  }, [model.windows, model.focusedWindowId]);
 
   const toPoint = (event: { clientX: number; clientY: number }) => {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -269,36 +456,10 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
       window.clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
-    pendingClickRef.current?.fire();
+    const pending = pendingClickRef.current;
+    pending?.fire();
     pendingClickRef.current = null;
-  };
-
-  const rememberSuppressedClick = (point: { x: number; y: number }) => {
-    suppressedClickRef.current = {
-      point,
-      releasedAt: performance.now()
-    };
-  };
-
-  const shouldSuppressClick = (point: { x: number; y: number }) => {
-    const suppressed = suppressedClickRef.current;
-    if (!suppressed) {
-      return false;
-    }
-
-    const age = performance.now() - suppressed.releasedAt;
-    if (age > DRAG_CLICK_SUPPRESS_MS) {
-      suppressedClickRef.current = null;
-      return false;
-    }
-
-    const distance = Math.hypot(point.x - suppressed.point.x, point.y - suppressed.point.y);
-    if (distance <= DRAG_CLICK_SUPPRESS_RADIUS) {
-      suppressedClickRef.current = null;
-      return true;
-    }
-
-    return false;
+    return pending?.settled ?? Promise.resolve();
   };
 
   const releasePointerCapture = (pointerId: number) => {
@@ -309,7 +470,71 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
     element.releasePointerCapture(pointerId);
   };
 
-  const finalizeDrag = (point?: { x: number; y: number }, suppressFollowUpClick = false) => {
+  const scheduleSingleClick = (point: { x: number; y: number }) => {
+    if (!onActionRef.current && !onBrowserContentActionRef.current) {
+      return;
+    }
+
+    rootRef.current?.focus();
+    clearPendingSingleClick();
+
+    let cancelled = false;
+    let releaseClick: (() => void) | null = null;
+    let settleClick: (() => void) | null = null;
+    const gate = new Promise<void>((resolve) => {
+      releaseClick = resolve;
+    });
+    const settled = new Promise<void>((resolve) => {
+      settleClick = resolve;
+    });
+
+    void gate.then(() => {
+      void drainPendingTyping().then(() => {
+        if (cancelled) {
+          settleClick?.();
+          return;
+        }
+        const addressBarWindow = getBrowserAddressBarAtPoint(point);
+        if (addressBarWindow) {
+          pendingAddressBarFocusWindowIdRef.current = addressBarWindow.id;
+          activeHybridContentWindowIdRef.current = null;
+        } else {
+          pendingAddressBarFocusWindowIdRef.current = null;
+        }
+        const hybridWindow = getHybridBrowserAtPoint(point);
+        if (hybridWindow && onBrowserContentActionRef.current) {
+          activeHybridContentWindowIdRef.current = hybridWindow.id;
+          void Promise.resolve(
+            onBrowserContentActionRef.current(hybridWindow.id, { kind: "click", x: point.x, y: point.y })
+          ).finally(() => settleClick?.());
+          return;
+        }
+        activeHybridContentWindowIdRef.current = null;
+        void Promise.resolve(onActionRef.current?.({ type: "CLICK", x: point.x, y: point.y })).finally(() =>
+          settleClick?.()
+        );
+      });
+    });
+
+    pendingClickRef.current = {
+      fire: () => {
+        releaseClick?.();
+      },
+      cancel: () => {
+        cancelled = true;
+        releaseClick?.();
+      },
+      settled
+    };
+
+    clickTimerRef.current = window.setTimeout(() => {
+      releaseClick?.();
+      clickTimerRef.current = null;
+      pendingClickRef.current = null;
+    }, 180);
+  };
+
+  const finalizeDrag = (point?: { x: number; y: number }) => {
     const drag = dragRef.current;
     if (!drag) {
       return;
@@ -322,84 +547,42 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
       return;
     }
 
-    if (suppressFollowUpClick) {
-      rememberSuppressedClick(finalPoint);
-    }
-
     void enqueueDragAction({ type: "DRAG_TO", x: finalPoint.x, y: finalPoint.y }).then(() =>
       enqueueDragAction({ type: "MOUSE_UP", button: "left" })
     );
   };
 
-  const queueSingleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onAction || event.button !== 0) {
-      return;
-    }
-    const point = toPoint(event);
-    if (shouldSuppressClick(point)) {
-      return;
-    }
-    rootRef.current?.focus();
-    clearPendingSingleClick();
-
-    let cancelled = false;
-    let releaseClick: (() => void) | null = null;
-    const gate = new Promise<void>((resolve) => {
-      releaseClick = resolve;
-    });
-
-    void gate.then(() => {
-      if (!cancelled) {
-        const hybridWindow = getHybridBrowserAtPoint(point);
-        if (hybridWindow && onBrowserContentAction) {
-          void onBrowserContentAction(hybridWindow.id, { kind: "click", x: point.x, y: point.y });
-          return;
-        }
-        void onAction({ type: "CLICK", x: point.x, y: point.y });
-      }
-    });
-
-    pendingClickRef.current = {
-      fire: () => {
-        releaseClick?.();
-      },
-      cancel: () => {
-        cancelled = true;
-        releaseClick?.();
-      }
-    };
-
-    clickTimerRef.current = window.setTimeout(() => {
-      releaseClick?.();
-      clickTimerRef.current = null;
-      pendingClickRef.current = null;
-    }, 180);
-  };
-
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onAction) {
+    if (!onActionRef.current && !onBrowserContentActionRef.current) {
       return;
     }
     event.preventDefault();
     rootRef.current?.focus();
     clearPendingSingleClick();
+    pendingAddressBarFocusWindowIdRef.current = null;
     const point = toPoint(event);
-    const hybridWindow = getHybridBrowserAtPoint(point);
-    if (hybridWindow && onBrowserContentAction) {
-      void onBrowserContentAction(hybridWindow.id, { kind: "double_click", x: point.x, y: point.y });
-      return;
-    }
-    void dispatchAction({ type: "DOUBLE_CLICK", x: point.x, y: point.y });
+    void drainPendingTyping().then(() => {
+      const hybridWindow = getHybridBrowserAtPoint(point);
+      if (hybridWindow && onBrowserContentActionRef.current) {
+        activeHybridContentWindowIdRef.current = hybridWindow.id;
+        void onBrowserContentActionRef.current(hybridWindow.id, { kind: "double_click", x: point.x, y: point.y });
+        return;
+      }
+      activeHybridContentWindowIdRef.current = null;
+      void dispatchAction({ type: "DOUBLE_CLICK", x: point.x, y: point.y });
+    });
   };
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onAction) {
+    if (!onActionRef.current) {
       return;
     }
     event.preventDefault();
     rootRef.current?.focus();
+    activeHybridContentWindowIdRef.current = null;
+    pendingAddressBarFocusWindowIdRef.current = null;
     const point = toPoint(event);
-    void dispatchAction({ type: "RIGHT_CLICK", x: point.x, y: point.y });
+    void drainPendingTyping().then(() => dispatchAction({ type: "RIGHT_CLICK", x: point.x, y: point.y }));
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -408,7 +591,8 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
       return;
     }
     event.preventDefault();
-    suppressedClickRef.current = null;
+    void drainPendingTyping();
+    pendingAddressBarFocusWindowIdRef.current = null;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
@@ -429,7 +613,7 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
     const point = toPoint(event);
     dragRef.current.lastPoint = point;
     if ((event.buttons & 1) === 0) {
-      finalizeDrag(point, true);
+      finalizeDrag(point);
       releasePointerCapture(event.pointerId);
       return;
     }
@@ -460,10 +644,14 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
       return;
     }
 
+    const wasDragging = dragRef.current.dragging;
     const point = toPoint(event);
     dragRef.current.lastPoint = point;
-    finalizeDrag(point, true);
+    finalizeDrag(point);
     releasePointerCapture(event.pointerId);
+    if (!wasDragging) {
+      scheduleSingleClick(point);
+    }
   };
 
   const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -471,12 +659,12 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
       return;
     }
 
-    finalizeDrag(dragRef.current.lastPoint, false);
+    finalizeDrag(dragRef.current.lastPoint);
     releasePointerCapture(event.pointerId);
   };
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!onAction) {
+    if (!onActionRef.current && !onBrowserContentActionRef.current) {
       return;
     }
     event.preventDefault();
@@ -486,58 +674,105 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
     const dy = Math.sign(event.deltaY) * Math.min(3, Math.ceil(Math.abs(event.deltaY) / 40));
     const dx = Math.sign(event.deltaX) * Math.min(3, Math.ceil(Math.abs(event.deltaX) / 40));
     if (dx !== 0 || dy !== 0) {
-      const hybridWindow = getHybridBrowserAtPoint(point);
-      if (hybridWindow && onBrowserContentAction) {
-        void onBrowserContentAction(hybridWindow.id, { kind: "scroll", x: point.x, y: point.y, dx, dy });
-        return;
-      }
-      void dispatchAction({ type: "SCROLL", dx, dy });
+      void drainPendingTyping().then(() => {
+        pendingAddressBarFocusWindowIdRef.current = null;
+        const hybridWindow = getHybridBrowserAtPoint(point);
+        if (hybridWindow && onBrowserContentActionRef.current) {
+          activeHybridContentWindowIdRef.current = hybridWindow.id;
+          void onBrowserContentActionRef.current(hybridWindow.id, { kind: "scroll", x: point.x, y: point.y, dx, dy });
+          return;
+        }
+        activeHybridContentWindowIdRef.current = null;
+        void dispatchAction({ type: "SCROLL", dx, dy });
+      });
     }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!onAction) {
+    if (!onActionRef.current && !onBrowserContentActionRef.current) {
       return;
     }
 
-    flushPendingSingleClick();
-    const lowerKey = event.key.toLowerCase();
+    const eventKey = event.key;
+    const lowerKey = eventKey.toLowerCase();
+    const isHotkey = event.ctrlKey || event.metaKey || event.altKey;
+    const isPressKey =
+      lowerKey === "enter" || lowerKey === "backspace" || lowerKey === "escape" || lowerKey === "f2" || lowerKey === "delete";
+    const isTab = eventKey === "Tab";
+    const isPrintable = eventKey.length === 1;
+    const hotkeyKeys = isHotkey ? normalizeHotkey(event) : [];
 
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-      const keys = normalizeHotkey(event);
-      if (keys.length > 1) {
-        event.preventDefault();
-        void dispatchAction({ type: "HOTKEY", keys });
+    if (isHotkey || isPressKey || isTab || isPrintable) {
+      event.preventDefault();
+    }
+
+    void enqueueKeyDispatch(async () => {
+      await flushPendingSingleClick();
+      const hybridWindow = pendingAddressBarFocusWindowIdRef.current ? undefined : getHybridBrowserForKeyboard();
+
+      if (isHotkey) {
+        if (hotkeyKeys.length > 1) {
+          await drainPendingTyping();
+          if (
+            hybridWindow &&
+            onBrowserContentActionRef.current &&
+            !(hotkeyKeys.length === 2 && hotkeyKeys.includes("ctrl") && hotkeyKeys.includes("l"))
+          ) {
+            await Promise.resolve(onBrowserContentActionRef.current(hybridWindow.id, { kind: "hotkey", keys: hotkeyKeys }));
+            return;
+          }
+          await dispatchAction({ type: "HOTKEY", keys: hotkeyKeys });
+        }
+        return;
       }
-      return;
-    }
 
-    if (lowerKey === "enter" || lowerKey === "backspace" || lowerKey === "escape" || lowerKey === "f2" || lowerKey === "delete") {
-      event.preventDefault();
-      void dispatchAction({ type: "PRESS", key: lowerKey });
-      return;
-    }
+      if (isPressKey) {
+        await drainPendingTyping();
+        if (lowerKey === "enter" || lowerKey === "escape") {
+          pendingAddressBarFocusWindowIdRef.current = null;
+        }
+        if (hybridWindow && onBrowserContentActionRef.current) {
+          await Promise.resolve(onBrowserContentActionRef.current(hybridWindow.id, { kind: "press", key: lowerKey }));
+          return;
+        }
+        await dispatchAction({ type: "PRESS", key: lowerKey });
+        return;
+      }
 
-    if (event.key === "Tab") {
-      event.preventDefault();
-      void dispatchAction({ type: "PRESS", key: "tab" });
-      return;
-    }
+      if (isTab) {
+        await drainPendingTyping();
+        pendingAddressBarFocusWindowIdRef.current = null;
+        if (hybridWindow && onBrowserContentActionRef.current) {
+          await Promise.resolve(onBrowserContentActionRef.current(hybridWindow.id, { kind: "press", key: "tab" }));
+          return;
+        }
+        await dispatchAction({ type: "PRESS", key: "tab" });
+        return;
+      }
 
-    if (event.key.length === 1) {
-      event.preventDefault();
-      void dispatchAction({ type: "TYPING", text: event.key });
-    }
+      if (isPrintable) {
+        if (hybridWindow && onBrowserContentActionRef.current) {
+          bufferTyping({ kind: "browser", windowId: hybridWindow.id }, eventKey);
+          return;
+        }
+        bufferTyping({ kind: "core" }, eventKey);
+      }
+    });
   };
 
   return (
     <div
       ref={rootRef}
       tabIndex={0}
-      onClick={queueSingleClick}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
+      onBlur={() => {
+        void enqueueKeyDispatch(async () => {
+          await flushPendingSingleClick();
+          await drainPendingTyping();
+        });
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -663,6 +898,8 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
         {model.taskbarItems.map((item) => {
           const meta = getAppMeta(item.appId);
           const active = model.focusedWindowId === item.windowId;
+          const running = item.running;
+          const minimized = item.minimized;
           return (
             <div
               key={item.windowId}
@@ -680,7 +917,7 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
               }}
             >
               <div style={{ position: "absolute", left: 4 }}>
-                <IndicatorDot active={active} accent={meta.accent} />
+                <IndicatorDot active={active} running={running} minimized={minimized} accent={meta.accent} />
               </div>
               <div
                 style={{
@@ -692,9 +929,19 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
                   justifyContent: "center",
                   background: active
                     ? "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.075))"
+                    : minimized
+                    ? "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04))"
                     : "linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
-                  boxShadow: active ? "0 10px 18px rgba(0,0,0,0.16)" : "0 3px 8px rgba(0,0,0,0.05)",
-                  border: active ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.04)",
+                  boxShadow: active
+                    ? "0 10px 18px rgba(0,0,0,0.16)"
+                    : minimized
+                    ? `0 8px 18px color-mix(in srgb, ${meta.accent} 18%, rgba(0,0,0,0.14))`
+                    : "0 3px 8px rgba(0,0,0,0.05)",
+                  border: active
+                    ? "1px solid rgba(255,255,255,0.12)"
+                    : minimized
+                    ? `1px solid color-mix(in srgb, ${meta.accent} 24%, rgba(255,255,255,0.1))`
+                    : "1px solid rgba(255,255,255,0.04)",
                   transform: active ? "translateX(1px)" : "none"
                 }}
               >
@@ -706,9 +953,36 @@ export function DesktopSurface({ model, onAction, onBrowserContentAction }: Desk
                     width: active ? 33 : 31,
                     height: active ? 33 : 31,
                     objectFit: "contain",
-                    filter: active ? "drop-shadow(0 5px 7px rgba(0,0,0,0.18))" : "none"
+                    filter: active || minimized ? "drop-shadow(0 5px 7px rgba(0,0,0,0.18))" : "none",
+                    opacity: minimized ? 0.96 : 1
                   }}
                 />
+                {item.badgeLabel && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: -2,
+                      bottom: -3,
+                      minWidth: 20,
+                      height: 16,
+                      padding: "0 5px",
+                      borderRadius: 999,
+                      background: "rgba(15,23,42,0.92)",
+                      color: "#f8fafc",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      boxShadow: "0 6px 12px rgba(0,0,0,0.24)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 9,
+                      fontWeight: 800,
+                      letterSpacing: 0.45,
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    {item.badgeLabel}
+                  </div>
+                )}
               </div>
             </div>
           );

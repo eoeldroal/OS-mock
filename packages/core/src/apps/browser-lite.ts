@@ -14,6 +14,11 @@ import type {
 } from "../types.js";
 import { pointInRect } from "../system/pointer.js";
 import { setClipboardText } from "../system/clipboard.js";
+import {
+  DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE,
+  DEFAULT_BROWSER_EXTERNAL_PAGE_URL,
+  DEFAULT_BROWSER_EXTERNAL_TAB_ID
+} from "./browser-defaults.js";
 
 const HEADER_HEIGHT = 32;
 const TAB_HEIGHT = 30;
@@ -147,6 +152,15 @@ function setUbuntuHelpExternalPage(browser: BrowserLiteState) {
   setExternalPage(browser, "https://help.ubuntu.com/", HELP_CENTER_TITLE, helpIndex);
 }
 
+function setDefaultExternalPage(browser: BrowserLiteState, activeTabIndex = 0) {
+  setExternalPage(
+    browser,
+    DEFAULT_BROWSER_EXTERNAL_PAGE_URL,
+    DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE,
+    activeTabIndex
+  );
+}
+
 function setExternalPage(browser: BrowserLiteState, url: string, title?: string, activeTabIndex = 0) {
   browser.currentPage = "external";
   browser.url = url;
@@ -187,6 +201,22 @@ function applyAddressInput(browser: BrowserLiteState) {
     setOsWorldPage(browser);
     return;
   }
+  if (normalized.includes("briefing.local")) {
+    setExternalPage(browser, "osmock://browser-fixtures/briefing", "Dock Briefing");
+    return;
+  }
+  if (normalized.includes("catalog.local")) {
+    setExternalPage(browser, "osmock://browser-fixtures/catalog", "Ops Catalog");
+    return;
+  }
+  if (normalized.includes("intake.local")) {
+    setExternalPage(browser, "osmock://browser-fixtures/intake", "Access Intake");
+    return;
+  }
+  if (normalized.startsWith("osmock://")) {
+    setExternalPage(browser, rawInput, "OS Mock Fixture");
+    return;
+  }
 
   const resolvedUrl = /^https?:\/\//i.test(rawInput) ? rawInput : `https://${rawInput}`;
   let title = resolvedUrl;
@@ -216,14 +246,14 @@ export function handleBrowserAction(
       const clickedTabIndex = layout.tabRects.findIndex((rect) => pointInRect(point, rect));
       if (clickedTabIndex >= 0) {
         const clickedTab = nextBrowser.tabs[clickedTabIndex];
-        if (clickedTab?.title === "Google") {
-          setExternalPage(nextBrowser, "https://www.google.com", "Google", 0);
+        if (clickedTab?.title === DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE) {
+          setDefaultExternalPage(nextBrowser, 0);
         } else if (clickedTab?.title === TASK_BOARD_TITLE) {
           setBrowserPage(nextBrowser, "explorer");
         } else if (clickedTab?.title === HELP_CENTER_TITLE) {
           setBrowserPage(nextBrowser, "help");
         } else if (clickedTabIndex === 0) {
-          setExternalPage(nextBrowser, "https://www.google.com", clickedTab?.title ?? "Google", 0);
+          setDefaultExternalPage(nextBrowser, 0);
         } else {
           setBrowserPage(nextBrowser, "help");
         }
@@ -657,14 +687,14 @@ export const browserLitePlugin: AppPlugin<BrowserLiteState> = {
       id: "browser-1",
       appName: "Mozilla Firefox",
       renderMode: "hybrid",
-      url: "https://www.google.com",
-      addressInput: "https://www.google.com",
+      url: DEFAULT_BROWSER_EXTERNAL_PAGE_URL,
+      addressInput: DEFAULT_BROWSER_EXTERNAL_PAGE_URL,
       addressBarFocused: false,
       addressReplaceOnType: false,
-      pageTitle: "Google",
+      pageTitle: DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE,
       currentPage: "external",
       tabs: [
-        { id: "tab-google", title: "Google", active: true },
+        { id: DEFAULT_BROWSER_EXTERNAL_TAB_ID, title: DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE, active: true },
         { id: "tab-osworld", title: TASK_BOARD_TITLE, active: false }
       ],
       bookmarks: [],

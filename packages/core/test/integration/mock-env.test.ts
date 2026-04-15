@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE,
+  DEFAULT_BROWSER_EXTERNAL_PAGE_URL
+} from "../../src/apps/browser-defaults.js";
+import {
+  addBrowserWindow,
+  addFiles,
+  addMailWindow,
+  addNoteEditorWindow,
+  createEmptyEnv,
+  createFile,
+  DEFAULT_VIEWPORT
+} from "../../src/env/factory.js";
 import { MockOsEnv } from "../../src/env/session.js";
 import { getOrderedFiles } from "../../src/system/filesystem.js";
+import { getTaskbarItems, focusWindow } from "../../src/system/window-manager.js";
 import type { A11yNode } from "../../src/types.js";
 import {
-  solveBrowserCaptureHelpLine,
-  solveBrowserLogWorkflowTaskId,
   runScriptedPolicyDemo,
   solveCopyLineBetweenWindows,
   solveDismissPopupThenAppendNote,
@@ -46,8 +58,6 @@ describe("MockOsEnv", () => {
       solveRenameNoteInExplorer(),
       solveCopyLineBetweenWindows(),
       solveMinimizeRecoverAndSave(),
-      solveBrowserLogWorkflowTaskId(),
-      solveBrowserCaptureHelpLine(),
       solveMailExtractMockNote(),
       solveTerminalRecordWorkingDirectory()
     ];
@@ -58,26 +68,99 @@ describe("MockOsEnv", () => {
     }
   });
 
+  it("initializes browser windows with the safer real-web default page", () => {
+    const env = addBrowserWindow(createEmptyEnv(DEFAULT_VIEWPORT), "browser-main", {
+      x: 120,
+      y: 80,
+      width: 720,
+      height: 520
+    });
+    const browser = env.appStates.browserLite["browser-main"];
+
+    expect(browser.url).toBe(DEFAULT_BROWSER_EXTERNAL_PAGE_URL);
+    expect(browser.addressInput).toBe(DEFAULT_BROWSER_EXTERNAL_PAGE_URL);
+    expect(browser.pageTitle).toBe(DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE);
+    expect(browser.tabs[0]?.title).toBe(DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE);
+  });
+
+  it("keeps note dock items in a stable file-based order and exposes visible badge labels", () => {
+    let env = createEmptyEnv(DEFAULT_VIEWPORT);
+    env = addFiles(env, [
+      createFile("file-draft", "draft.txt", "Draft"),
+      createFile("file-reference", "reference.txt", "Reference")
+    ]);
+    env = addNoteEditorWindow(env, "notes-draft", "file-draft", { x: 120, y: 90, width: 320, height: 360 }, true);
+    env = addNoteEditorWindow(env, "notes-reference", "file-reference", { x: 460, y: 90, width: 320, height: 360 }, false);
+
+    const initialItems = getTaskbarItems(env).filter((item) => item.appId === "note-editor");
+    expect(initialItems.map((item) => item.title)).toEqual(["draft.txt", "reference.txt"]);
+    expect(initialItems.map((item) => item.badgeLabel)).toEqual(["DRA", "REF"]);
+
+    const refocused = focusWindow(env, "notes-reference");
+    const refocusedItems = getTaskbarItems(refocused).filter((item) => item.appId === "note-editor");
+    expect(refocusedItems.map((item) => item.title)).toEqual(["draft.txt", "reference.txt"]);
+  });
+
+  it("derives default Thunderbird folder counts from the actual message list", () => {
+    const env = addMailWindow(createEmptyEnv(DEFAULT_VIEWPORT), "mail-main", {
+      x: 84,
+      y: 82,
+      width: 960,
+      height: 540
+    });
+    const mail = env.appStates.mailLite["mail-main"];
+
+    expect(mail.folders).toEqual([
+      { id: "inbox", name: "Inbox", unread: 2 },
+      { id: "drafts", name: "Drafts", unread: 0 },
+      { id: "sent", name: "Sent", unread: 0 },
+      { id: "archive", name: "Archive", unread: 0 }
+    ]);
+  });
+
+  it("starts browser web tasks from the safer real-web landing page before local navigation", () => {
+    const taskIds = [
+      "browser_open_briefing_heading_to_note",
+      "browser_catalog_owner_to_note",
+      "browser_intake_confirmation_to_note",
+      "browser_catalog_audit_append_save"
+    ] as const;
+
+    for (const taskId of taskIds) {
+      const setup = getTaskSpec(taskId).setup(0, DEFAULT_VIEWPORT);
+      const browser = setup.envState.appStates.browserLite["browser-main"];
+
+      expect(browser.url).toBe(DEFAULT_BROWSER_EXTERNAL_PAGE_URL);
+      expect(browser.pageTitle).toBe(DEFAULT_BROWSER_EXTERNAL_PAGE_TITLE);
+      expect(browser.currentPage).toBe("external");
+    }
+  });
+
+  it("uses task-completion summaries for non-terminal DONE actions", () => {
+    expect(solveRenameNoteInExplorer().info.actionSummary).toBe("task_completed");
+
+    const incomplete = new MockOsEnv();
+    incomplete.reset({ taskId: "rename_note_in_explorer", seed: 0 });
+    expect(incomplete.step({ type: "DONE" }).info.actionSummary).toBe("task_done_without_goal");
+  });
+
+  it("keeps terminal completion summaries for terminal-like tasks", () => {
+    expect(solveTerminalRecordWorkingDirectory().info.actionSummary).toBe("terminal_task_completed");
+  });
+
+  it("labels note typing as text changes before cursor movement side effects", () => {
+    const env = new MockOsEnv();
+    env.reset({ taskId: "copy_line_between_windows", seed: 0, maxSteps: 0 });
+
+    const typed = env.step({ type: "TYPING", text: "x" });
+
+    expect(typed.actionAccepted).toBe(true);
+    expect(typed.info.actionSummary).toBe("text_changed");
+  });
+
   it("runs the combined scripted demo", () => {
     const results = runScriptedPolicyDemo();
     expect(Object.values(results).every((result) => result.terminated)).toBe(true);
-  });
-
-  it("resolves public compatibility aliases through reset without changing canonical task ids", () => {
-    const aliasPairs = [
-      ["browser_log_workflow_task_id", "browser_log_task_preopen_note_hard"],
-      ["browser_capture_help_line", "browser_help_preopen_note_distractors"]
-    ] as const;
-
-    for (const [aliasId, canonicalId] of aliasPairs) {
-      const env = new MockOsEnv();
-      const resetResult = env.reset({ taskId: aliasId, seed: 0, maxSteps: 0 });
-
-      expect(getTaskSpec(aliasId).id).toBe(canonicalId);
-      expect(resetResult.task?.id).toBe(canonicalId);
-      expect(resetResult.observation.a11yTree.length).toBeGreaterThan(0);
-      expect(Array.isArray(resetResult.observation.browserAugmentations)).toBe(true);
-    }
   });
 
   it("supports window controls and pinned dock relaunch", () => {
@@ -211,6 +294,29 @@ describe("MockOsEnv", () => {
     expect(env.getHiddenState().stepIndex).toBe(1);
   });
 
+  it("applies external browser runtime sync before evaluating task progress", () => {
+    const env = new MockOsEnv();
+    env.reset({ taskId: "browser_catalog_owner_to_note", seed: 0, maxSteps: 0 });
+
+    const synced = env.step(
+      { type: "WAIT" },
+      {
+        externalBrowserRuntimeSync: [
+          {
+            windowId: "browser-main",
+            url: "osmock://browser-fixtures/catalog#entry=kernel-backlog",
+            pageTitle: "Ops Catalog",
+            addressInput: "osmock://browser-fixtures/catalog#entry=kernel-backlog",
+            activeTabTitle: "Ops Catalog"
+          }
+        ]
+      }
+    );
+
+    expect(synced.info.lastProgress).toContain("browser.url_matches");
+    expect(env.getHiddenState().envState.appStates.browserLite["browser-main"].url).toContain("#entry=kernel-backlog");
+  });
+
   it("snaps a dragged window to maximize when released at the top edge", () => {
     const env = new MockOsEnv();
     env.reset({ taskId: "rename_note_in_explorer", seed: 0, maxSteps: 0 });
@@ -233,21 +339,7 @@ describe("MockOsEnv", () => {
     expect(release.info.actionSummary).toBe("window_state_changed");
   });
 
-  it("supports selecting and copying source lines across browser, terminal, and mail surfaces", () => {
-    const browserEnv = new MockOsEnv();
-    browserEnv.reset({ taskId: "browser_capture_help_line", seed: 0 });
-    const expectedAddress = browserEnv.getHiddenState().envState.appStates.browserLite["browser-main"].url;
-    let browserNodes = browserEnv.observe().observation.a11yTree;
-    const addressBar = flattenA11y(browserNodes).find((node) => node.role === "textbox" && node.name === "Address bar");
-    browserEnv.step({
-      type: "CLICK",
-      x: addressBar!.bounds.x + 18,
-      y: addressBar!.bounds.y + Math.round(addressBar!.bounds.height / 2)
-    });
-    const browserCopy = browserEnv.step({ type: "HOTKEY", keys: ["ctrl", "c"] });
-    expect(browserEnv.getHiddenState().envState.clipboard.text).toBe(expectedAddress);
-    expect(browserCopy.info.actionSummary).toBe("clipboard_changed");
-
+  it("supports selecting and copying source lines across terminal and mail surfaces", () => {
     const terminalEnv = new MockOsEnv();
     terminalEnv.reset({ taskId: "terminal_record_working_directory", seed: 0 });
     const terminalBox = terminalEnv
@@ -275,11 +367,10 @@ describe("MockOsEnv", () => {
 
     const mailEnv = new MockOsEnv();
     mailEnv.reset({ taskId: "mail_extract_mock_note", seed: 0 });
+    const mailHidden = mailEnv.getHiddenState();
     const mailMessage = flattenA11y(mailEnv.observe().observation.a11yTree)
       .find(
-        (node) =>
-          node.role === "listitem" &&
-          (node.name.includes("Workspace notes") || node.name.includes("Environment notes"))
+        (node) => node.role === "listitem" && node.id.endsWith(mailHidden.targets.targetMessageId)
       );
     mailEnv.step({
       type: "CLICK",
@@ -290,7 +381,7 @@ describe("MockOsEnv", () => {
       .find(
         (node) =>
           node.role === "label" &&
-          node.text === "Remember to test perturbations while the viewer is open."
+          node.text === mailHidden.targets.appendText
       );
     mailEnv.step({
       type: "CLICK",
@@ -298,25 +389,8 @@ describe("MockOsEnv", () => {
       y: previewLine!.bounds.y + Math.round(previewLine!.bounds.height / 2)
     });
     const mailCopy = mailEnv.step({ type: "HOTKEY", keys: ["ctrl", "c"] });
-    expect(mailEnv.getHiddenState().envState.clipboard.text).toBe(
-      "Remember to test perturbations while the viewer is open."
-    );
+    expect(mailEnv.getHiddenState().envState.clipboard.text).toBe(mailHidden.targets.appendText);
     expect(mailCopy.info.actionSummary).toBe("clipboard_changed");
-  });
-
-  it("accepts inert clicks on empty area of an already focused browser window", () => {
-    const env = new MockOsEnv();
-    env.reset({ taskId: "browser_capture_help_line", seed: 0 });
-    const browserWindow = env.getRenderModel().windows.find((window) => window.appId === "browser-lite");
-
-    const result = env.step({
-      type: "CLICK",
-      x: browserWindow!.bounds.x + browserWindow!.bounds.width - 24,
-      y: browserWindow!.bounds.y + browserWindow!.bounds.height - 24
-    });
-
-    // Empty-area clicks are accepted (like real Ubuntu focus behavior)
-    expect(result.actionAccepted).toBe(true);
   });
 
   it("allocates deterministic runtime file ids and directories for terminal-created files", () => {
@@ -489,27 +563,4 @@ describe("MockOsEnv", () => {
     expect(terminal.lastOutput).toBe("inside.txt");
   });
 
-  it("keeps the Firefox task board tab wired to the stable board URL", () => {
-    const env = new MockOsEnv();
-    env.reset({ taskId: "browser_log_workflow_task_id", seed: 0 });
-
-    let browser = env.getHiddenState().envState.appStates.browserLite["browser-main"];
-    expect(browser.tabs.some((tab) => tab.title === "Task Board")).toBe(true);
-
-    const explorerTab = flattenA11y(env.observe().observation.a11yTree).find(
-      (node) => node.role === "button" && node.name === "Task Board"
-    );
-    expect(explorerTab).toBeTruthy();
-
-    env.step({
-      type: "CLICK",
-      x: explorerTab!.bounds.x + Math.round(explorerTab!.bounds.width / 2),
-      y: explorerTab!.bounds.y + Math.round(explorerTab!.bounds.height / 2)
-    });
-
-    browser = env.getHiddenState().envState.appStates.browserLite["browser-main"];
-    expect(browser.currentPage).toBe("explorer");
-    expect(browser.url).toBe("https://workspace.local/task-board");
-    expect(browser.tabs.find((tab) => tab.title === "Task Board")?.active).toBe(true);
-  });
 });

@@ -1,4 +1,4 @@
-import type { Computer13Action, RenderModel } from "../../core/src/types.js";
+import type { BrowserContentInput, Computer13Action, RenderModel } from "../../core/src/types.js";
 
 export function getSessionIdFromPath(pathname: string) {
   const parts = pathname.split("/").filter(Boolean);
@@ -32,9 +32,7 @@ export async function postViewerAction(sessionId: string, action: Computer13Acti
 export async function postBrowserContentAction(
   sessionId: string,
   windowId: string,
-  input:
-    | { kind: "click" | "double_click"; x: number; y: number }
-    | { kind: "scroll"; x: number; y: number; dx: number; dy: number }
+  input: BrowserContentInput
 ) {
   const response = await fetch(`/api/sessions/${sessionId}/browser/${windowId}/input`, {
     method: "POST",

@@ -81,6 +81,10 @@ function evaluatePredicate(
         (browser) =>
           browser.currentPage === "help" && browser.selectedHelpTopicId === targets.targetHelpTopicId
       );
+    case "browser.url_matches":
+      return Object.values(state.appStates.browserLite).some((browser) =>
+        browser.currentPage === "external" && browser.url.includes(targets.targetBrowserUrlFragment)
+      );
     case "mail.message_opened":
       return Object.values(state.appStates.mailLite).some(
         (mail) => mail.selectedMessageId === targets.targetMessageId

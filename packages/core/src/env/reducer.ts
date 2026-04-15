@@ -1,5 +1,6 @@
 import { produce } from "immer";
 import { handleFileExplorerAction } from "../apps/file-explorer.js";
+import { FILE_EXPLORER_MIN_WINDOW_WIDTH } from "../apps/file-explorer.js";
 import { handleBrowserAction } from "../apps/browser-lite.js";
 import { handleMailAction } from "../apps/mail-lite.js";
 import { handleNoteEditorAction } from "../apps/note-editor.js";
@@ -17,7 +18,9 @@ import {
 } from "../system/context-menu.js";
 import type {
   Computer13Action,
+  DesktopIcon,
   EnvState,
+  FileSystemPlace,
   MouseButton,
   Point,
   Rect,
@@ -25,7 +28,7 @@ import type {
   WindowInstance,
   WindowResizeState
 } from "../types.js";
-import { addNoteEditorWindow, GNOME_DOCK_WIDTH, GNOME_TOP_BAR_HEIGHT, launchAppWindow } from "./factory.js";
+import { addExplorerWindow, addNoteEditorWindow, GNOME_DOCK_WIDTH, GNOME_TOP_BAR_HEIGHT, launchAppWindow } from "./factory.js";
 import { pointInRect, clipPoint } from "../system/pointer.js";
 import {
   closeWindow,
@@ -41,7 +44,16 @@ import {
   restoreWindow,
   toggleMaximizeWindow
 } from "../system/window-manager.js";
-import { createFileEntry, createUniqueEntryName, getFileEntry, getOrderedFiles, getPlacePath, insertFileEntry } from "../system/filesystem.js";
+import {
+  createFileEntry,
+  createUniqueEntryName,
+  ensureDirectoryPath,
+  findFileByName,
+  getFileEntry,
+  getOrderedFiles,
+  getPlacePath,
+  insertFileEntry
+} from "../system/filesystem.js";
 import { allocateEntityId } from "../system/entity-id.js";
 
 export type ReduceResult = {
@@ -193,11 +205,11 @@ function buildActionSummary(
   if (appChange) {
     return appChange;
   }
-  if (selectionChanged(previous, next)) {
-    return "selection_changed";
-  }
   if (noteBufferChanged(previous, next)) {
     return action.type === "HOTKEY" ? "text_pasted" : "text_changed";
+  }
+  if (selectionChanged(previous, next)) {
+    return "selection_changed";
   }
   if (previousFiles.some((file) => {
     const updated = getFileEntry(next.fileSystem, file.id);
@@ -360,6 +372,13 @@ function applyWindowDragReleaseSnap(state: EnvState, point: Point, button: Mouse
 const MIN_WINDOW_WIDTH = 200;
 const MIN_WINDOW_HEIGHT = 150;
 
+function getMinimumWindowWidth(window: WindowInstance) {
+  if (window.appId === "file-explorer") {
+    return FILE_EXPLORER_MIN_WINDOW_WIDTH;
+  }
+  return MIN_WINDOW_WIDTH;
+}
+
 function beginWindowResize(state: EnvState, point: Point, button: MouseButton): EnvState {
   if (button !== "left" || state.popups.length > 0) return state;
 
@@ -394,14 +413,15 @@ function updateResizedWindow(state: EnvState, point: Point): EnvState {
     const dx = point.x - resize.initialPointer.x;
     const dy = point.y - resize.initialPointer.y;
     const ib = resize.initialBounds;
+    const minWindowWidth = getMinimumWindowWidth(win);
 
     let newX = ib.x, newY = ib.y, newW = ib.width, newH = ib.height;
 
     // Apply resize based on edge
-    if (resize.edge.includes("e")) newW = Math.max(MIN_WINDOW_WIDTH, ib.width + dx);
+    if (resize.edge.includes("e")) newW = Math.max(minWindowWidth, ib.width + dx);
     if (resize.edge.includes("w")) {
       const proposedW = ib.width - dx;
-      if (proposedW >= MIN_WINDOW_WIDTH) { newX = ib.x + dx; newW = proposedW; }
+      if (proposedW >= minWindowWidth) { newX = ib.x + dx; newW = proposedW; }
     }
     if (resize.edge.includes("s")) newH = Math.max(MIN_WINDOW_HEIGHT, ib.height + dy);
     if (resize.edge.includes("n")) {
@@ -476,6 +496,81 @@ function openOrFocusNoteEditor(state: EnvState, fileId: string, preferredId?: st
   const bounds = { x, y: top, width: noteWidth, height: noteHeight };
 
   return addNoteEditorWindow(state, nextId, fileId, bounds, true);
+}
+
+const DEFAULT_EXPLORER_LAUNCH_BOUNDS = { x: 84, y: 82, width: 388, height: 460 };
+
+function openOrFocusExplorerWindow(
+  state: EnvState,
+  place: FileSystemPlace = "workspace",
+  directory = getPlacePath(state.fileSystem, place)
+): EnvState {
+  const ensuredState = produce(state, draft => {
+    draft.fileSystem = ensureDirectoryPath(draft.fileSystem, directory);
+  });
+  const existingWindow = ensuredState.windows
+    .filter((window) => window.appId === "file-explorer")
+    .sort((left, right) => right.zIndex - left.zIndex)[0];
+
+  if (existingWindow) {
+    const restored = restoreWindow(ensuredState, existingWindow.id);
+    return produce(restored, draft => {
+      const explorer = draft.appStates.fileExplorer[existingWindow.id];
+      explorer.currentPlace = place;
+      explorer.currentDirectory = directory;
+      explorer.selectedFileId = undefined;
+      explorer.renameMode = undefined;
+    });
+  }
+
+  const next = addExplorerWindow(ensuredState, "explorer-main", DEFAULT_EXPLORER_LAUNCH_BOUNDS, true, false);
+  return produce(next, draft => {
+    const explorer = draft.appStates.fileExplorer["explorer-main"];
+    explorer.currentPlace = place;
+    explorer.currentDirectory = directory;
+    explorer.selectedFileId = undefined;
+    explorer.renameMode = undefined;
+  });
+}
+
+function ensureNoteFile(state: EnvState, name: string, directory: string): { envState: EnvState; fileId: string } {
+  const existing = findFileByName(state.fileSystem, name, directory);
+  if (existing) {
+    return { envState: state, fileId: existing.id };
+  }
+
+  let fileId = "";
+  const next = produce(state, draft => {
+    fileId = allocateEntityId(draft, "file");
+    draft.fileSystem = insertFileEntry(draft.fileSystem, createFileEntry(fileId, name, "", directory));
+  });
+  return { envState: next, fileId };
+}
+
+function activateDesktopIcon(state: EnvState, icon: DesktopIcon): EnvState {
+  if (icon.action === "open-trash") {
+    return openOrFocusExplorerWindow(state, icon.place ?? "Desktop", icon.directory ?? "/desktop/Trash");
+  }
+
+  if (icon.appId === "note-editor") {
+    const targetDirectory = icon.directory ?? getPlacePath(state.fileSystem, "Desktop");
+    const ensured = ensureNoteFile(state, icon.label, targetDirectory);
+    return openOrFocusNoteEditor(ensured.envState, ensured.fileId);
+  }
+
+  if (icon.appId === "file-explorer") {
+    return openOrFocusExplorerWindow(
+      state,
+      icon.place ?? "workspace",
+      icon.directory ?? getPlacePath(state.fileSystem, icon.place ?? "workspace")
+    );
+  }
+
+  if (icon.appId) {
+    return launchAppWindow(state, icon.appId);
+  }
+
+  return state;
 }
 
 function handlePopupClick(state: EnvState, point: Point) {
@@ -983,8 +1078,8 @@ export function reduceEnvState(envState: EnvState, action: Computer13Action): Re
         // Desktop icons (double-click to launch)
         if (action.type === "DOUBLE_CLICK") {
           const icon = next.desktopIcons.find(i => pointInRect(point, i.bounds));
-          if (icon && icon.appId) {
-            next = launchAppWindow(next, icon.appId);
+          if (icon) {
+            next = activateDesktopIcon(next, icon);
             accepted = true;
             break;
           }

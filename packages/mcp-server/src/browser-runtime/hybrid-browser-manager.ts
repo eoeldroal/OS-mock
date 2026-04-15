@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import type { A11yNode, BrowserLiteViewModel, BrowserSurfaceViewModel, Rect, RenderModel } from "../../../core/src/types.js";
+import type { A11yNode, BrowserContentInput, BrowserLiteViewModel, BrowserSurfaceViewModel, Rect, RenderModel } from "../../../core/src/types.js";
+import { isBrowserFixtureUrl, resolveBrowserFixtureUrl } from "./browser-fixtures.js";
 import { renderBrowserSurfaceHtml } from "./browser-surface-template.js";
 import { extractBrowserDomSnapshot } from "./browser-dom-snapshot.js";
 
@@ -27,7 +28,44 @@ function surfaceKey(sessionId: string, windowId: string) {
   return `${sessionId}:${windowId}`;
 }
 
+function toPlaywrightKey(key: string) {
+  const normalized = key.toLowerCase();
+  switch (normalized) {
+    case "ctrl":
+    case "control":
+      return "Control";
+    case "meta":
+    case "cmd":
+    case "command":
+      return "Meta";
+    case "alt":
+      return "Alt";
+    case "shift":
+      return "Shift";
+    case "enter":
+      return "Enter";
+    case "backspace":
+      return "Backspace";
+    case "escape":
+    case "esc":
+      return "Escape";
+    case "tab":
+      return "Tab";
+    case "delete":
+      return "Delete";
+    case "space":
+      return " ";
+    default:
+      if (normalized.length === 1) {
+        return normalized;
+      }
+      return key;
+  }
+}
+
 export class HybridBrowserManager {
+  constructor(private readonly baseUrl: string) {}
+
   private browser?: Browser;
   private readonly contexts = new Map<string, BrowserContext>();
   private readonly surfaces = new Map<string, SurfaceRecord>();
@@ -145,7 +183,10 @@ export class HybridBrowserManager {
           await surface!.page.setViewportSize({ width, height });
           if (viewModel.currentPage === "external") {
             try {
-              await surface!.page.goto(viewModel.url, {
+              const targetUrl = isBrowserFixtureUrl(viewModel.url)
+                ? resolveBrowserFixtureUrl(viewModel.url, this.baseUrl)
+                : viewModel.url;
+              await surface!.page.goto(targetUrl, {
                 waitUntil: "domcontentloaded",
                 timeout: 15000
               });
@@ -260,29 +301,7 @@ export class HybridBrowserManager {
     };
   }
 
-  async forwardInput(
-    sessionId: string,
-    windowId: string,
-    input:
-      | { kind: "click" | "double_click"; x: number; y: number }
-      | { kind: "scroll"; x: number; y: number; dx?: number; dy?: number }
-  ) {
-    const surface = this.surfaces.get(surfaceKey(sessionId, windowId));
-    if (!surface) {
-      return false;
-    }
-    const localX = Math.max(0, Math.min(surface.width - 1, input.x - surface.contentBounds.x));
-    const localY = Math.max(0, Math.min(surface.height - 1, input.y - surface.contentBounds.y));
-
-    if (input.kind === "scroll") {
-      await surface.page.mouse.move(localX, localY);
-      await surface.page.mouse.wheel((input.dx ?? 0) * 80, (input.dy ?? 0) * 120);
-    } else {
-      await surface.page.mouse.click(localX, localY, {
-        clickCount: input.kind === "double_click" ? 2 : 1
-      });
-    }
-
+  private async refreshSurface(surface: SurfaceRecord) {
     await surface.page.waitForTimeout(120);
     const frameBuffer = (await surface.page.screenshot({ type: "png" })) as Buffer;
     surface.frameVersion += 1;
@@ -294,7 +313,41 @@ export class HybridBrowserManager {
     }
     surface.title = (await surface.page.title()) || surface.title;
     surface.url = surface.page.url() || surface.url;
-    surface.a11yNodes = await extractBrowserDomSnapshot(surface.page, windowId, surface.contentBounds);
+    surface.a11yNodes = await extractBrowserDomSnapshot(surface.page, surface.windowId, surface.contentBounds);
+  }
+
+  async forwardInput(
+    sessionId: string,
+    windowId: string,
+    input: BrowserContentInput
+  ) {
+    const surface = this.surfaces.get(surfaceKey(sessionId, windowId));
+    if (!surface) {
+      return false;
+    }
+    if (input.kind === "click" || input.kind === "double_click" || input.kind === "scroll") {
+      const localX = Math.max(0, Math.min(surface.width - 1, input.x - surface.contentBounds.x));
+      const localY = Math.max(0, Math.min(surface.height - 1, input.y - surface.contentBounds.y));
+
+      if (input.kind === "scroll") {
+        await surface.page.mouse.move(localX, localY);
+        await surface.page.mouse.wheel((input.dx ?? 0) * 80, (input.dy ?? 0) * 120);
+      } else {
+        await surface.page.mouse.click(localX, localY, {
+          clickCount: input.kind === "double_click" ? 2 : 1
+        });
+      }
+    } else if (input.kind === "type") {
+      await surface.page.keyboard.insertText(input.text);
+    } else if (input.kind === "press") {
+      await surface.page.keyboard.press(toPlaywrightKey(input.key));
+    } else if (input.kind === "hotkey") {
+      await surface.page.keyboard.press(input.keys.map((key) => toPlaywrightKey(key)).join("+"));
+    } else {
+      return false;
+    }
+
+    await this.refreshSurface(surface);
     return true;
   }
 

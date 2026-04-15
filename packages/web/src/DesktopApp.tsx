@@ -1,18 +1,34 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import type { Computer13Action, RenderModel } from "../../core/src/types.js";
+import type { BrowserContentInput, Computer13Action, RenderModel } from "../../core/src/types.js";
 import { DesktopSurface } from "./components/DesktopSurface";
 import { fetchRenderModel, getSessionIdFromPath, postBrowserContentAction, postViewerAction } from "./render-model";
+
+type ToastTone = "error" | "warning" | "success" | "info";
+
+type ToastState = {
+  tone: ToastTone;
+  message: string;
+};
 
 function getWsUrl(sessionId: string) {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws?sessionId=${sessionId}`;
 }
 
-function ToastOverlay({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+function ToastOverlay({ tone, message, onDismiss }: ToastState & { onDismiss: () => void }) {
   useEffect(() => {
-    const timer = setTimeout(onDismiss, 5000);
+    const timer = setTimeout(onDismiss, tone === "success" ? 4200 : 6500);
     return () => clearTimeout(timer);
-  }, [message, onDismiss]);
+  }, [message, onDismiss, tone]);
+
+  const background =
+    tone === "success"
+      ? "rgba(22, 163, 74, 0.94)"
+      : tone === "warning"
+        ? "rgba(217, 119, 6, 0.94)"
+        : tone === "info"
+          ? "rgba(37, 99, 235, 0.94)"
+          : "rgba(220, 38, 38, 0.92)";
 
   return (
     <div
@@ -21,7 +37,7 @@ function ToastOverlay({ message, onDismiss }: { message: string; onDismiss: () =
         top: 16,
         right: 16,
         zIndex: 99999,
-        background: "rgba(220, 38, 38, 0.92)",
+        background,
         color: "#fff",
         padding: "12px 20px",
         borderRadius: 8,
@@ -40,8 +56,22 @@ function ToastOverlay({ message, onDismiss }: { message: string; onDismiss: () =
 }
 
 function WaitingForTaskOverlay() {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    overlayRef.current?.focus();
+  }, []);
+
   return (
     <div
+      ref={overlayRef}
+      tabIndex={0}
+      onClick={(event) => event.preventDefault()}
+      onMouseDown={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       style={{
         position: "fixed",
         inset: 0,
@@ -49,7 +79,10 @@ function WaitingForTaskOverlay() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: "none"
+        pointerEvents: "auto",
+        background: "rgba(9, 12, 20, 0.24)",
+        backdropFilter: "blur(5px)",
+        outline: "none"
       }}
     >
       <div
@@ -91,11 +124,58 @@ function WaitingForTaskOverlay() {
   );
 }
 
+function describeStepResult(result: {
+  actionAccepted?: boolean;
+  reward?: number;
+  cumulativeReward?: number;
+  terminated?: boolean;
+  truncated?: boolean;
+  info?: { actionSummary?: string; lastViolations?: string[] };
+}) {
+  if (result.truncated) {
+    return {
+      tone: "warning" as const,
+      message: "Task reached its step limit. Inspect the visible windows and note state before retrying."
+    };
+  }
+
+  if (result.terminated) {
+    if ((result.cumulativeReward ?? 0) > 0) {
+      return {
+        tone: "success" as const,
+        message: "Task completed. Review the saved note and visible output before moving on."
+      };
+    }
+
+    if (result.info?.actionSummary === "terminal_task_failed") {
+      return {
+        tone: "error" as const,
+        message: "This run was marked as failed. Check the terminal output and note contents to see where it broke."
+      };
+    }
+
+    return {
+      tone: "warning" as const,
+      message:
+        "Task ended without reaching the expected result. Check the current output, note contents, and any visible warnings."
+    };
+  }
+
+  if (result.actionAccepted === false) {
+    return {
+      tone: "warning" as const,
+      message: "Action was rejected. The current UI state may be blocking that interaction."
+    };
+  }
+
+  return null;
+}
+
 export function DesktopApp() {
   const sessionId = useMemo(() => getSessionIdFromPath(window.location.pathname), []);
   const [model, setModel] = useState<RenderModel | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const actionQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const dismissToast = useCallback(() => setToast(null), []);
@@ -113,7 +193,10 @@ export function DesktopApp() {
       .then((nextModel) => {
         if (active) {
           if (nextModel.sessionId && nextModel.sessionId !== sessionId) {
-            setToast(`Ignored mismatched initial model for session ${nextModel.sessionId}`);
+            setToast({
+              tone: "warning",
+              message: `Ignored mismatched initial model for session ${nextModel.sessionId}`
+            });
             return;
           }
           document.title = `OS Mock Viewer · ${nextModel.sessionId ?? sessionId} · ${nextModel.taskId ?? "idle"}`;
@@ -133,7 +216,10 @@ export function DesktopApp() {
       try {
         const parsed = JSON.parse(event.data) as RenderModel;
         if (parsed.sessionId && parsed.sessionId !== sessionId) {
-          setToast(`Ignored mismatched session update for ${parsed.sessionId}`);
+          setToast({
+            tone: "warning",
+            message: `Ignored mismatched session update for ${parsed.sessionId}`
+          });
           return;
         }
         document.title = `OS Mock Viewer · ${parsed.sessionId ?? sessionId} · ${parsed.taskId ?? "idle"}`;
@@ -178,7 +264,10 @@ export function DesktopApp() {
     }
 
     if (!hasTask) {
-      setToast("No task loaded yet. Run 'reset <taskId>' in the CLI first.");
+      setToast({
+        tone: "warning",
+        message: "No task loaded yet. Run 'reset <taskId>' in the CLI first."
+      });
       return Promise.resolve();
     }
 
@@ -188,13 +277,31 @@ export function DesktopApp() {
       .then((result) => {
         // If server returned a no_task error (200 but with error field)
         if (result && typeof result === "object" && "error" in result) {
-          setToast((result as { message?: string }).message ?? "Action rejected by server");
+          setToast({
+            tone: "error",
+            message: (result as { message?: string }).message ?? "Action rejected by server"
+          });
+          return;
+        }
+
+        const described = describeStepResult(
+          result as {
+            actionAccepted?: boolean;
+            reward?: number;
+            cumulativeReward?: number;
+            terminated?: boolean;
+            truncated?: boolean;
+            info?: { actionSummary?: string; lastViolations?: string[] };
+          }
+        );
+        if (described) {
+          setToast(described);
         }
       })
       .catch((reason) => {
         // Network / HTTP error — show as toast, don't crash
         const msg = reason instanceof Error ? reason.message : String(reason);
-        setToast(msg);
+        setToast({ tone: "error", message: msg });
       });
 
     return actionQueueRef.current;
@@ -202,25 +309,41 @@ export function DesktopApp() {
 
   const handleBrowserContentAction = (
     windowId: string,
-    input:
-      | { kind: "click" | "double_click"; x: number; y: number }
-      | { kind: "scroll"; x: number; y: number; dx: number; dy: number }
+    input: BrowserContentInput
   ) => {
     if (!sessionId) {
       return Promise.resolve();
     }
 
     if (!hasTask) {
-      setToast("No task loaded yet. Run 'reset <taskId>' in the CLI first.");
+      setToast({
+        tone: "warning",
+        message: "No task loaded yet. Run 'reset <taskId>' in the CLI first."
+      });
       return Promise.resolve();
     }
 
     actionQueueRef.current = actionQueueRef.current
       .catch(() => undefined)
       .then(() => postBrowserContentAction(sessionId, windowId, input))
+      .then((result) => {
+        const described = describeStepResult(
+          result as {
+            actionAccepted?: boolean;
+            reward?: number;
+            cumulativeReward?: number;
+            terminated?: boolean;
+            truncated?: boolean;
+            info?: { actionSummary?: string; lastViolations?: string[] };
+          }
+        );
+        if (described) {
+          setToast(described);
+        }
+      })
       .catch((reason) => {
         const msg = reason instanceof Error ? reason.message : String(reason);
-        setToast(msg);
+        setToast({ tone: "error", message: msg });
       });
 
     return actionQueueRef.current;
@@ -228,8 +351,13 @@ export function DesktopApp() {
 
   return (
     <>
-      <DesktopSurface model={model} onAction={handleAction} onBrowserContentAction={handleBrowserContentAction} />
-      {toast && <ToastOverlay message={toast} onDismiss={dismissToast} />}
+      <DesktopSurface
+        model={model}
+        onAction={hasTask ? handleAction : undefined}
+        onBrowserContentAction={hasTask ? handleBrowserContentAction : undefined}
+      />
+      {!hasTask && <WaitingForTaskOverlay />}
+      {toast && <ToastOverlay tone={toast.tone} message={toast.message} onDismiss={dismissToast} />}
     </>
   );
 }

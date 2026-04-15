@@ -15,13 +15,9 @@ import {
   normalizeDirectory,
   setWorkingDirectory
 } from "../system/filesystem.js";
-import { getBrowserHelpTopic } from "../browser-fixtures.js";
 import { focusWindow, raiseWindow } from "../system/window-manager.js";
 import type { BrowserLiteState, EnvState, FileEntry } from "../types.js";
 import type {
-  BrowserScenarioContext,
-  BrowserScenarioOptions,
-  BrowserScenarioStart,
   CompanionWindowOptions,
   ExplorerWorkspaceScenarioOptions,
   MailScenarioContext,
@@ -70,6 +66,56 @@ export function addScenarioEntries(envState: EnvState, entries: ScenarioFileDefi
   }, envState);
 }
 
+export function configureBrowserStart(
+  browser: BrowserLiteState,
+  options: Partial<
+    Pick<
+      BrowserLiteState,
+      | "renderMode"
+      | "url"
+      | "addressInput"
+      | "addressBarFocused"
+      | "addressReplaceOnType"
+      | "pageTitle"
+      | "currentPage"
+      | "tabs"
+      | "bookmarks"
+      | "categories"
+      | "selectedCategoryId"
+      | "selectedTaskId"
+      | "helpTopics"
+      | "selectedHelpTopicId"
+      | "helpLines"
+      | "lastOpenedBookmarkId"
+      | "selectedHelpLineIndex"
+    >
+  >
+) {
+  if (options.renderMode !== undefined) browser.renderMode = options.renderMode;
+  if (options.url !== undefined) browser.url = options.url;
+  if (options.addressInput !== undefined) {
+    browser.addressInput = options.addressInput;
+  } else if (options.url !== undefined) {
+    browser.addressInput = options.url;
+  }
+  if (options.addressBarFocused !== undefined) browser.addressBarFocused = options.addressBarFocused;
+  if (options.addressReplaceOnType !== undefined) browser.addressReplaceOnType = options.addressReplaceOnType;
+  if (options.pageTitle !== undefined) browser.pageTitle = options.pageTitle;
+  if (options.currentPage !== undefined) browser.currentPage = options.currentPage;
+  if (options.tabs !== undefined) browser.tabs = structuredClone(options.tabs);
+  if (options.bookmarks !== undefined) browser.bookmarks = structuredClone(options.bookmarks);
+  if (options.categories !== undefined) browser.categories = structuredClone(options.categories);
+  if (options.selectedCategoryId !== undefined) browser.selectedCategoryId = options.selectedCategoryId;
+  if (options.selectedTaskId !== undefined) browser.selectedTaskId = options.selectedTaskId;
+  if (options.helpTopics !== undefined) browser.helpTopics = structuredClone(options.helpTopics);
+  if (options.selectedHelpTopicId !== undefined) browser.selectedHelpTopicId = options.selectedHelpTopicId;
+  if (options.helpLines !== undefined) browser.helpLines = [...options.helpLines];
+  if (options.lastOpenedBookmarkId !== undefined) browser.lastOpenedBookmarkId = options.lastOpenedBookmarkId;
+  if (options.selectedHelpLineIndex !== undefined) {
+    browser.selectedHelpLineIndex = options.selectedHelpLineIndex;
+  }
+}
+
 function addScenarioExplorerWindow(envState: EnvState, options: ScenarioExplorerWindowOptions) {
   const windowId = options.windowId ?? "explorer-main";
   const nextState = addExplorerWindow(
@@ -102,7 +148,7 @@ function addScenarioNoteWindow(envState: EnvState, noteTarget: ScenarioNoteWindo
     envState,
     windowId,
     noteTarget.fileId,
-    noteTarget.bounds ?? { x: 968, y: 84, width: 300, height: 380 },
+    noteTarget.bounds ?? { x: 928, y: 84, width: 340, height: 420 },
     noteTarget.focused ?? false,
     initialContent,
     noteTarget.dirty ?? false,
@@ -116,144 +162,6 @@ function finalizeWindowFocus(envState: EnvState, focusWindowId?: string) {
     return envState;
   }
   return raiseWindow(focusWindow(envState, focusWindowId), focusWindowId);
-}
-
-function normalizeTaskBrowserTabs(browser: BrowserLiteState, active: "explorer" | "help") {
-  browser.tabs = [
-    {
-      id: `${browser.id}-tab-1`,
-      title: "Task Board",
-      active: active === "explorer"
-    },
-    {
-      id: `${browser.id}-tab-2`,
-      title: "Ubuntu help",
-      active: active === "help"
-    }
-  ];
-}
-
-export function configureBrowserStart(browser: BrowserLiteState, start: BrowserScenarioStart) {
-  if (start.page === "help") {
-    const topic = getBrowserHelpTopic(start.topicId ?? "dock-basics");
-    normalizeTaskBrowserTabs(browser, "help");
-    browser.currentPage = "help";
-    browser.pageTitle = "Ubuntu help";
-    browser.url = "https://help.ubuntu.com/desktop-guide";
-    browser.selectedHelpTopicId = topic.id;
-    browser.helpLines = [...topic.lines];
-    return;
-  }
-
-  normalizeTaskBrowserTabs(browser, "explorer");
-  browser.currentPage = "explorer";
-  browser.pageTitle = "Task Board";
-  browser.url = "https://workspace.local/task-board";
-  browser.selectedCategoryId = start.categoryId ?? "workflow";
-  browser.selectedTaskId = start.taskId ?? "workflow_mail_bridge";
-}
-
-export function openBrowserWithPage({
-  instruction,
-  viewport,
-  start,
-  browserWindowId = "browser-main",
-  browserBounds,
-  browserFocused = true,
-  browserMinimized = false
-}: Pick<
-  BrowserScenarioOptions,
-  | "instruction"
-  | "viewport"
-  | "start"
-  | "browserWindowId"
-  | "browserBounds"
-  | "browserFocused"
-  | "browserMinimized"
->): BrowserScenarioContext {
-  const envState = addBrowserWindow(
-    createEmptyEnv(viewport, instruction),
-    browserWindowId,
-    browserBounds,
-    browserFocused,
-    browserMinimized
-  );
-  const browserState = envState.appStates.browserLite[browserWindowId];
-  configureBrowserStart(browserState, start);
-
-  return {
-    envState,
-    browserState,
-    browserWindowId,
-    noteFileId: ""
-  };
-}
-
-export function openBrowserNoteScenario({
-  instruction,
-  viewport,
-  start,
-  browserWindowId = "browser-main",
-  browserBounds,
-  browserFocused = true,
-  browserMinimized = false,
-  workspaceFiles = [],
-  explorerWindow = false,
-  noteTarget
-}: BrowserScenarioOptions): BrowserScenarioContext {
-  const browserScenario = openBrowserWithPage({
-    instruction,
-    viewport,
-    start,
-    browserWindowId,
-    browserBounds,
-    browserFocused,
-    browserMinimized
-  });
-
-  const noteEntries = noteTarget
-    ? [
-        createScenarioFile(
-          noteTarget.fileId,
-          noteTarget.fileName,
-          noteTarget.initialContent ?? "",
-          normalizeDirectory(noteTarget.directory ?? "/workspace")
-        )
-      ]
-    : [];
-  let envState = addScenarioEntries(browserScenario.envState, [...noteEntries, ...workspaceFiles]);
-
-  let explorerWindowId: string | undefined;
-  if (explorerWindow) {
-    explorerWindowId = explorerWindow.windowId ?? "explorer-main";
-    envState = addScenarioExplorerWindow(envState, explorerWindow);
-  }
-
-  let noteWindowId: string | undefined;
-  if (noteTarget?.preopen) {
-    const built = addScenarioNoteWindow(envState, noteTarget);
-    envState = built.envState;
-    noteWindowId = built.noteWindowId;
-  }
-
-  const explicitFocusWindowId =
-    noteTarget?.preopen && noteTarget.focused
-      ? noteWindowId
-      : explorerWindow && explorerWindow.focused
-        ? explorerWindowId
-        : browserFocused
-          ? browserWindowId
-          : undefined;
-  envState = finalizeWindowFocus(envState, explicitFocusWindowId);
-
-  return {
-    envState,
-    browserState: envState.appStates.browserLite[browserWindowId],
-    browserWindowId,
-    noteFileId: noteTarget?.fileId ?? "",
-    noteWindowId,
-    explorerWindowId
-  };
 }
 
 function addOptionalBrowserWindow(envState: EnvState, options: CompanionWindowOptions | false | undefined) {
@@ -364,7 +272,7 @@ export function createTerminalScenario({
     ...noteTarget,
     preopen: true,
     windowId: "notes-target",
-    bounds: { x: 968, y: 84, width: 300, height: 380 },
+    bounds: { x: 896, y: 88, width: 372, height: 428 },
     focused: false,
     minimized: false
   },
@@ -394,7 +302,7 @@ export function createTerminalScenario({
   envState = addTerminalWindow(
     envState,
     "terminal-main",
-    { x: 438, y: 482, width: 540, height: 250 },
+    { x: 428, y: 472, width: 564, height: 258 },
     true,
     false
   );
@@ -455,7 +363,7 @@ export function createMailScenario({
     ...noteTarget,
     preopen: true,
     windowId: "notes-target",
-    bounds: { x: 968, y: 84, width: 300, height: 380 },
+    bounds: { x: 918, y: 96, width: 350, height: 426 },
     focused: false,
     minimized: false
   },
@@ -466,7 +374,7 @@ export function createMailScenario({
   initialFolderId = "inbox",
   mailWindow = {
     windowId: "mail-main",
-    bounds: { x: 438, y: 84, width: 520, height: 560 },
+    bounds: { x: 430, y: 84, width: 560, height: 568 },
     focused: true,
     minimized: false
   }

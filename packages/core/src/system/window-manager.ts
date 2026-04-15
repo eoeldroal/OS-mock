@@ -214,6 +214,13 @@ export function getTaskbarItems(state: EnvState): TaskbarItem[] {
   const items: TaskbarItem[] = [];
   const sortedWindows = state.windows.slice().sort((left, right) => right.zIndex - left.zIndex);
 
+  const buildNoteDockBadgeLabel = (title: string) => {
+    const stem = title.replace(/\.[^.]+$/, "").trim();
+    const compact = stem.replace(/[^a-z0-9]+/gi, "");
+    const source = compact || stem;
+    return source.slice(0, 3).toUpperCase() || "TXT";
+  };
+
   for (const appId of PINNED_APP_IDS) {
     const primaryWindow = sortedWindows.find((window) => window.appId === appId);
     items.push({
@@ -222,6 +229,7 @@ export function getTaskbarItems(state: EnvState): TaskbarItem[] {
       appId,
       pinned: true,
       running: Boolean(primaryWindow),
+      minimized: primaryWindow?.minimized ?? false,
       iconLabel: iconLabels[appId] ?? "APP",
       bounds: {
         x,
@@ -235,7 +243,13 @@ export function getTaskbarItems(state: EnvState): TaskbarItem[] {
   const noteWindows = state.windows
     .slice()
     .filter((window) => window.appId === "note-editor")
-    .sort((left, right) => left.zIndex - right.zIndex);
+    .sort((left, right) => {
+      const titleCompare = left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
+      if (titleCompare !== 0) {
+        return titleCompare;
+      }
+      return left.id.localeCompare(right.id);
+    });
 
   for (const window of noteWindows) {
     items.push({
@@ -244,7 +258,9 @@ export function getTaskbarItems(state: EnvState): TaskbarItem[] {
       appId: window.appId,
       pinned: false,
       running: true,
+      minimized: window.minimized,
       iconLabel: iconLabels[window.appId] ?? "APP",
+      badgeLabel: buildNoteDockBadgeLabel(window.title),
       bounds: {
         x,
         y: startY + items.length * (itemHeight + 10),
