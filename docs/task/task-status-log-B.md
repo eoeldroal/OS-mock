@@ -81,12 +81,12 @@ done
 
 | Bucket | Count |
 | --- | --- |
-| `pass` | 0 |
+| `pass` | 20 |
 | `pass_with_notes` | 0 |
 | `fail` | 0 |
 | `blocked` | 0 |
 | `needs_recheck` | 0 |
-| `not_started` | 20 |
+| `not_started` | 0 |
 
 ## Per-Task Log
 
@@ -98,26 +98,26 @@ done
 
 | No. | Task ID | Seed | Status | Observed Result | Issue Type | Next Action |
 | --- | --- | --- | --- | --- | --- | --- |
-| 021 | `rename_among_two` | `0` | `not_started` |  | `none` | `none` |
-| 022 | `rename_among_three` | `0` | `not_started` |  | `none` | `none` |
-| 023 | `rename_among_four` | `0` | `not_started` |  | `none` | `none` |
-| 024 | `popup_then_open` | `0` | `not_started` |  | `none` | `none` |
-| 025 | `popup_then_rename` | `0` | `not_started` |  | `none` | `none` |
-| 026 | `restore_and_save` | `0` | `not_started` |  | `none` | `none` |
-| 027 | `restore_specific_of_two` | `0` | `not_started` |  | `none` | `none` |
-| 028 | `restore_from_all_minimized` | `0` | `not_started` |  | `none` | `none` |
-| 029 | `open_and_append` | `0` | `not_started` |  | `none` | `none` |
-| 030 | `popup_then_restore` | `0` | `not_started` |  | `none` | `none` |
-| 031 | `dock_launch_then_open` | `0` | `not_started` |  | `none` | `none` |
-| 032 | `dock_launch_then_rename` | `0` | `not_started` |  | `none` | `none` |
-| 033 | `restore_explorer_then_rename` | `0` | `not_started` |  | `none` | `none` |
-| 034 | `switch_between_notes` | `0` | `not_started` |  | `none` | `none` |
-| 035 | `open_from_unfocused_explorer` | `0` | `not_started` |  | `none` | `none` |
-| 036 | `open_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 037 | `open_append_save_among_three` | `0` | `not_started` |  | `none` | `none` |
-| 038 | `open_append_save_among_four` | `0` | `not_started` |  | `none` | `none` |
-| 039 | `rename_then_open` | `0` | `not_started` |  | `none` | `none` |
-| 040 | `popup_then_open_append_save` | `0` | `not_started` |  | `none` | `none` |
+| 021 | `rename_among_two` | `0` | `pass` |  | `none` | `none` |
+| 022 | `rename_among_three` | `0` | `pass` |  | `none` | `none` |
+| 023 | `rename_among_four` | `0` | `pass` |  | `none` | `none` |
+| 024 | `popup_then_open` | `0` | `pass` |  | `none` | `none` |
+| 025 | `popup_then_rename` | `0` | `pass` |  | `none` | `none` |
+| 026 | `restore_and_save` | `0` | `pass` |  | `none` | `none` |
+| 027 | `restore_specific_of_two` | `0` | `pass` |  | `none` | `none` |
+| 028 | `restore_from_all_minimized` | `0` | `pass` |  | `none` | `none` |
+| 029 | `open_and_append` | `0` | `pass` |  | `none` | `none` |
+| 030 | `popup_then_restore` | `0` | `pass` |  | `none` | `none` |
+| 031 | `dock_launch_then_open` | `0` | `pass` |  | `none` | `none` |
+| 032 | `dock_launch_then_rename` | `0` | `pass` |  | `none` | `none` |
+| 033 | `restore_explorer_then_rename` | `0` | `pass` |  | `none` | `none` |
+| 034 | `switch_between_notes` | `0` | `pass` |  | `none` | `none` |
+| 035 | `open_from_unfocused_explorer` | `0` | `pass` |  | `none` | `none` |
+| 036 | `open_append_save` | `0` | `pass` |  | `none` | `none` |
+| 037 | `open_append_save_among_three` | `0` | `pass` |  | `none` | `none` |
+| 038 | `open_append_save_among_four` | `0` | `pass` |  | `none` | `none` |
+| 039 | `rename_then_open` | `0` | `pass` |  | `none` | `none` |
+| 040 | `popup_then_open_append_save` | `0` | `pass` |  | `none` | `none` |
 
 ## Freeform Notes
 
@@ -130,5 +130,7 @@ done
 - 
 
 ### Viewer or Runtime Oddities
+
+- 드래그 동작 입력시 드래그가 안 멈추는 오류 발생
 
 - 
