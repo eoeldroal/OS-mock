@@ -36,10 +36,19 @@ export class ScreenshotService {
       `frame-${String(stepIndex).padStart(4, "0")}.png`
     );
     await mkdir(dirname(filePath), { recursive: true });
-    await page.goto(viewerUrl, { waitUntil: "networkidle" });
-    await page.screenshot({ path: filePath });
-    await page.close();
-    return filePath;
+    await page.goto(viewerUrl, { waitUntil: "domcontentloaded", timeout: 5_000 }).catch(() => {});
+    await page
+      .waitForFunction(() => {
+        const bodyText = document.body?.innerText ?? "";
+        return document.readyState !== "loading" && !bodyText.includes("Loading session viewer");
+      }, undefined, { timeout: 5_000 })
+      .catch(() => {});
+    const captured = await page
+      .screenshot({ path: filePath, timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    void page.close().catch(() => {});
+    return captured ? filePath : undefined;
   }
 
   async close() {

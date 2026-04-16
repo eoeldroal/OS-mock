@@ -41,6 +41,9 @@ type ExternalBrowserDispatch = {
   input: BrowserContentInput;
 };
 
+const HYBRID_SYNC_TIMEOUT_MS = 5_000;
+const SCREENSHOT_CAPTURE_TIMEOUT_MS = 5_000;
+
 function pointInRect(point: { x: number; y: number }, rect: { x: number; y: number; width: number; height: number }) {
   return (
     point.x >= rect.x &&
@@ -744,16 +747,7 @@ export class HostApp {
 
   private async getSessionRenderModel(session: SessionRecord): Promise<RenderModel> {
     const model = session.env.getRenderModel();
-    try {
-      await this.hybridBrowserManager.syncSession(session.id, model);
-    } catch (error) {
-      this.logViewerEvent({
-        source: "hybrid",
-        sessionId: session.id,
-        event: "sync_failed",
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
+    await this.syncHybridBrowserBestEffort(session.id, model, "sync_failed");
     const windows = model.windows.map((window) => {
       if (window.appView.type !== "browser-lite" || window.appView.renderMode !== "hybrid") {
         return window;
@@ -791,6 +785,41 @@ export class HostApp {
     };
   }
 
+  private async syncHybridBrowserBestEffort(
+    sessionId: string,
+    renderModel: RenderModel,
+    event: "sync_failed" | "decorate_sync_failed"
+  ) {
+    try {
+      await Promise.race([
+        this.hybridBrowserManager.syncSession(sessionId, renderModel),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Hybrid browser sync timed out after ${HYBRID_SYNC_TIMEOUT_MS}ms.`)), HYBRID_SYNC_TIMEOUT_MS)
+        )
+      ]);
+    } catch (error) {
+      this.logViewerEvent({
+        source: "hybrid",
+        sessionId,
+        event,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async captureScreenshotBestEffort(session: SessionRecord, stepIndex: number) {
+    try {
+      return await Promise.race([
+        this.screenshotService.capture(session.id, stepIndex, session.viewerUrl),
+        new Promise((resolve) =>
+          setTimeout(() => resolve(undefined), SCREENSHOT_CAPTURE_TIMEOUT_MS)
+        )
+      ]);
+    } catch {
+      return undefined;
+    }
+  }
+
   private async decorateResult(session: SessionRecord, result: StepResult) {
     result.observation = await this.decorateObservation(session, result.observation, {
       includeScreenshot: true
@@ -804,22 +833,13 @@ export class HostApp {
     opts?: { includeScreenshot?: boolean }
   ) {
     const renderModel = session.env.getRenderModel();
-    try {
-      await this.hybridBrowserManager.syncSession(session.id, renderModel);
-    } catch (error) {
-      this.logViewerEvent({
-        source: "hybrid",
-        sessionId: session.id,
-        event: "decorate_sync_failed",
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
+    await this.syncHybridBrowserBestEffort(session.id, renderModel, "decorate_sync_failed");
     const browserAugmentations = this.collectBrowserObservationAugmentations(
       session.id,
       renderModel
     );
     const screenshotPath = opts?.includeScreenshot
-      ? await this.screenshotService.capture(session.id, renderModel.stepIndex, session.viewerUrl)
+      ? await this.captureScreenshotBestEffort(session, renderModel.stepIndex)
       : observation.screenshotPath;
     return withBrowserAugmentations(
       {

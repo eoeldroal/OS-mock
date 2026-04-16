@@ -142,6 +142,29 @@ function shellStyles(title: string, body: string, script = "") {
 </html>`;
 }
 
+function renderStartFixture() {
+  return shellStyles(
+    "OS Mock Start Page",
+    `
+      <div class="eyebrow">OS Mock</div>
+      <h1>OS Mock Start Page</h1>
+      <p>Use the address bar to open a task page such as briefing.local, catalog.local, or intake.local. This stable start page avoids network-dependent failures before the task actually begins.</p>
+      <section class="panel grid">
+        <div>
+          <span class="label">Task pages</span>
+          <p class="code">briefing.local</p>
+          <p class="code">catalog.local</p>
+          <p class="code">intake.local</p>
+        </div>
+        <div>
+          <span class="label">Workflow reminder</span>
+          <p>Open the requested local page, extract the visible field, and record it in the note or file named by the task.</p>
+        </div>
+      </section>
+    `
+  );
+}
+
 function renderBriefingFixture() {
   return shellStyles(
     "Dock Briefing",
@@ -312,7 +335,17 @@ export function resolveBrowserFixtureUrl(url: string, baseUrl: string) {
   return url.replace("osmock://browser-fixtures", `${normalizedBase}/browser-fixtures`);
 }
 
+export function extractBrowserFixtureId(url: string) {
+  if (!isBrowserFixtureUrl(url)) {
+    return undefined;
+  }
+  return url.replace("osmock://browser-fixtures/", "").split(/[?#]/)[0] || undefined;
+}
+
 export function renderBrowserFixturePage(fixtureId: string) {
+  if (fixtureId === "start") {
+    return renderStartFixture();
+  }
   if (fixtureId === "briefing") {
     return renderBriefingFixture();
   }

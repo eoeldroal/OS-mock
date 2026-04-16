@@ -1,6 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { A11yNode, BrowserContentInput, BrowserLiteViewModel, BrowserSurfaceViewModel, Rect, RenderModel } from "../../../core/src/types.js";
-import { isBrowserFixtureUrl, resolveBrowserFixtureUrl } from "./browser-fixtures.js";
+import { extractBrowserFixtureId, isBrowserFixtureUrl, renderBrowserFixturePage, resolveBrowserFixtureUrl } from "./browser-fixtures.js";
 import { renderBrowserSurfaceHtml } from "./browser-surface-template.js";
 import { extractBrowserDomSnapshot } from "./browser-dom-snapshot.js";
 
@@ -181,15 +181,36 @@ export class HybridBrowserManager {
         surface!.loading = true;
         try {
           await surface!.page.setViewportSize({ width, height });
+          const fixtureUrl = isBrowserFixtureUrl(viewModel.url)
+            ? resolveBrowserFixtureUrl(viewModel.url, this.baseUrl)
+            : undefined;
+          const fixtureId = isBrowserFixtureUrl(viewModel.url)
+            ? extractBrowserFixtureId(viewModel.url)
+            : undefined;
+          const fixtureHash = fixtureUrl && fixtureUrl.includes("#")
+            ? fixtureUrl.slice(fixtureUrl.indexOf("#"))
+            : "";
           if (viewModel.currentPage === "external") {
             try {
-              const targetUrl = isBrowserFixtureUrl(viewModel.url)
-                ? resolveBrowserFixtureUrl(viewModel.url, this.baseUrl)
-                : viewModel.url;
-              await surface!.page.goto(targetUrl, {
-                waitUntil: "domcontentloaded",
-                timeout: 15000
-              });
+              if (fixtureId) {
+                const fixtureHtml = renderBrowserFixturePage(fixtureId);
+                if (!fixtureHtml) {
+                  throw new Error(`Unknown browser fixture: ${fixtureId}`);
+                }
+                await surface!.page.goto(`about:blank${fixtureHash}`, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 5_000
+                }).catch(() => undefined);
+                await surface!.page.setContent(fixtureHtml, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 5_000
+                });
+              } else {
+                await surface!.page.goto(viewModel.url, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 5000
+                });
+              }
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               await surface!.page.setContent(
@@ -198,25 +219,30 @@ export class HybridBrowserManager {
                   <div style="margin-top:12px;font-size:14px;color:#475569;">${viewModel.url}</div>
                   <pre style="margin-top:18px;white-space:pre-wrap;font-size:12px;color:#64748b;">${message}</pre>
                 </body></html>`,
-                { waitUntil: "load" }
+                { waitUntil: "domcontentloaded", timeout: 5_000 }
               );
             }
           } else {
-            await surface!.page.setContent(renderBrowserSurfaceHtml(viewModel), { waitUntil: "load" });
+            await surface!.page.setContent(renderBrowserSurfaceHtml(viewModel), { waitUntil: "domcontentloaded", timeout: 5_000 });
           }
-          const frameBuffer = (await surface!.page.screenshot({
-            type: "png"
-          })) as Buffer;
-          surface!.frameVersion += 1;
-          surface!.frameBuffer = frameBuffer;
-          surface!.frameHistory.set(surface!.frameVersion, frameBuffer);
-          while (surface!.frameHistory.size > 4) {
-            const oldest = Math.min(...surface!.frameHistory.keys());
-            surface!.frameHistory.delete(oldest);
+          const frameBuffer = (await surface!.page
+            .screenshot({
+              type: "png",
+              timeout: 5_000
+            })
+            .catch(() => undefined)) as Buffer | undefined;
+          if (frameBuffer) {
+            surface!.frameVersion += 1;
+            surface!.frameBuffer = frameBuffer;
+            surface!.frameHistory.set(surface!.frameVersion, frameBuffer);
+            while (surface!.frameHistory.size > 4) {
+              const oldest = Math.min(...surface!.frameHistory.keys());
+              surface!.frameHistory.delete(oldest);
+            }
           }
           surface!.signature = signature;
-          surface!.title = (await surface!.page.title()) || viewModel.pageTitle;
-          surface!.url = surface!.page.url() || viewModel.url;
+          surface!.title = fixtureId ? viewModel.pageTitle : (await surface!.page.title()) || viewModel.pageTitle;
+          surface!.url = fixtureUrl ?? (surface!.page.url() || viewModel.url);
           surface!.width = width;
           surface!.height = height;
           surface!.currentPage = viewModel.currentPage;
@@ -225,7 +251,7 @@ export class HybridBrowserManager {
             surface!.page,
             windowId,
             viewModel.layout.contentBounds
-          );
+          ).catch(() => surface!.a11yNodes);
         } finally {
           surface!.loading = false;
         }
