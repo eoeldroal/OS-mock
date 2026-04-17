@@ -117,7 +117,7 @@ done
 | 097 | `terminal_find_shell_script` | `0` | `pass with notes` | `공통 기능상 문제와 동일, ls *.sh 기능 x` | `terminal` | `bugfix` |
 | 098 | `terminal_cat_process_list` | `0` | `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
 | 099 | `terminal_cat_yaml_config` | `0` | `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
-| 100 | `terminal_cat_cert_expiry` | `0` |  `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 100 | `terminal_cat_cert_expiry` | `0` | `pass with notes` |`공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
 
 ## Freeform Notes
 
