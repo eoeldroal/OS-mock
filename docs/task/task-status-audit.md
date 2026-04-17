@@ -104,11 +104,11 @@
 | 078 | `mail_extract_rebooked_flight` | `D` | `fix_needed` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 |
 | 079 | `mail_extract_unsubscribe_link` | `D` | `blocked` | 메일 스크롤 불가로 하단 링크 확인 불가, 태스크 진행 불가 |
 | 080 | `terminal_list_directory_contents` | `D` | `fix_needed` | 성공. instruction에 파일명을 줄바꿈으로 구분해야 한다는 설명 누락, 공백 구분으로 입력 시 실패 |
-| 081 | `team3_terminal_record_working_directory` | `E` | `fix_needed` | `pwd` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 txt 파일에서 글자가 깨져 보였다. |
-| 082 | `terminal_cat_and_save_config` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 txt 파일에서 글자가 깨져 보였다. |
-| 083 | `terminal_cat_env_password` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 txt 파일에서 글자가 깨져 보였다. |
-| 084 | `terminal_cat_log_error_code` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 txt 파일에서 글자가 깨져 보였다. |
-| 085 | `terminal_list_log_directory` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 txt 파일에서 글자가 깨져 보였다. |
+| 081 | `team3_terminal_record_working_directory` | `E` | `fix_needed` | `pwd` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 텍스트 커서 위치가 이상함 |
+| 082 | `terminal_cat_and_save_config` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 텍스트 커서 위치가 이상함 |
+| 083 | `terminal_cat_env_password` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 텍스트 커서 위치가 이상함 |
+| 084 | `terminal_cat_log_error_code` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 텍스트 커서 위치가 이상함 |
+| 085 | `terminal_list_log_directory` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. `ctrl+C`, `ctrl+v`를 쓰면 텍스트 커서 위치가 이상함 |
 | 086 | `terminal_cat_csv_email` | `E` | `fix_needed` | `cat`, `ls` 기능은 정상이고 txt 저장도 가능했다. 다만 리다이렉션 기능이 없고, 명령을 여러 번 입력하면 터미널이 멈추며 스크롤도 되지 않았다. 터미널 영역 드래그 선택이 되지 않아 필요한 부분만 복사해 붙여넣을 수 없었다. |
 | 087 | `terminal_record_deep_pwd` | `E` | `drop` | 중복되는 task 제거 필요 81과 동일 |
 | 088 | `terminal_cat_hidden_credentials` | `E` | `fix_needed` | `ls` 실행 시 `.**` 파일들도 구분 없이 그대로 출력됐다. |
