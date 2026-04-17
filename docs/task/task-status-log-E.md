@@ -94,11 +94,11 @@ done
 
 | No. | Task ID | Seed | Status | Observed Result | Issue Type | Next Action |
 | --- | --- | --- | --- | --- | --- | --- |
-| 081 | `team3_terminal_record_working_directory` | `0` | `fix_needed` | `pwd기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 082 | `terminal_cat_and_save_config` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 083 | `terminal_cat_env_password` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 084 | `terminal_cat_log_error_code` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 085 | `terminal_list_log_directory` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
+| 081 | `team3_terminal_record_working_directory` | `0` | `fix_needed` | `pwd기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 텍스트 커서 위치 이상함` | `ux, terminal` | `bugfix` |
+| 082 | `terminal_cat_and_save_config` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 텍스트 커서 위치 이상함` | `ux, terminal` | `bugfix` |
+| 083 | `terminal_cat_env_password` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 텍스트 커서 위치 이상함` | `ux, terminal` | `bugfix` |
+| 084 | `terminal_cat_log_error_code` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 텍스트 커서 위치 이상함` | `ux, terminal` | `bugfix` |
+| 085 | `terminal_list_log_directory` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 텍스트 커서 위치 이상함` | `ux, terminal` | `bugfix` |
 | 086 | `terminal_cat_csv_email` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. 터미널 부분 드래그 선택 안돼서 해당 부분만 복사 붙여넣기 불가능` | `ux, terminal` | `bugfix` |
 | 087 | `terminal_record_deep_pwd` | `0` | `drop` | `중복되는 task 제거 필요 81과 동일` | `none` | `none` |
 | 088 | `terminal_cat_hidden_credentials` | `0` | `fix_needed` | `ls 시 .** 파일들도 그냥 출력` | `terminal` | `bugfix` |
