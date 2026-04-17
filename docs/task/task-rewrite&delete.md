@@ -138,7 +138,56 @@
 
 | No. | Task ID | Audit Status | Final Action | Owner | Current State | Follow-up Summary | Final List Bucket | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 051 | `rename_open_append_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 052 | `popup_then_rename_open` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 053 | `popup_then_copy_paste_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 054 | `popup_then_restore_append_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 055 | `dock_launch_rename_then_open` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 056 | `all_minimized_restore_append_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 057 | `popup_dock_launch_open_append_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 058 | `popup_rename_open_append_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 059 | `popup_all_minimized_restore_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 060 | `dock_launch_open_copy_paste_save` | `pass` | `keep` |  | `done` | 유지 | `유지 Task 목록` |  |
+| 061 | `mail_extract_invoice_amount` | `fix_needed` | `rewrite` |  | `todo` | `문자 단위 스크롤 기능 추가 필요` | `미배치` |  |
+| 062 | `mail_record_sender_address` | `fix_needed` | `rewrite` |  | `todo` | `메일 내 스크롤, 메일 주소 부분 선택 가능하게 변경 필요` | `미배치` |  |
+| 063 | `mail_extract_reset_link` | `fix_needed` | `rewrite` |  | `todo` | `메일 내 스크롤 기능 부재로 주소 부분 선택 불가` | `미배치` |  |
+| 064 | `mail_extract_meeting_time` | `fix_needed` | `rewrite` |  | `todo` | `문자 단위 스크롤 기능 추가 필요 + 블럭 단위 선택 마우스로 안됨` | `미배치` |  |
+| 065 | `mail_extract_tracking_info` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 066 | `mail_extract_spam_sender` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 067 | `mail_extract_2fa_code` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 068 | `mail_extract_trash_link` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일 + trash 폴더 클릭 잘 안됨` | `미배치` |  |
+| 069 | `mail_extract_messy_receipt_total` | `blocked` | `hold` |  | `todo` | `스크롤 불가로 인한 수행 불가` | `보류 Task 목록` |  |
+| 070 | `mail_extract_flight_pnr` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 071 | `mail_extract_exception_name` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 072 | `mail_extract_ssh_ip` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 073 | `mail_extract_cancellation_fee` | `blocked` | `hold` |  | `todo` | `스크롤 불가로 인한 수행 불가` | `보류 Task 목록` |  |
+| 074 | `mail_extract_hr_phone` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 075 | `mail_extract_draft_recipient` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 076 | `mail_extract_promo_code` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 077 | `mail_extract_deadline` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 078 | `mail_extract_rebooked_flight` | `fix_needed` | `rewrite` |  | `todo` | `64와 동일` | `미배치` |  |
+| 079 | `mail_extract_unsubscribe_link` | `blocked` | `hold` |  | `todo` | `스크롤 불가로 인한 수행 불가` | `보류 Task 목록` |  |
+| 080 | `terminal_list_directory_contents` | `fix_needed` | `rewrite` |  | `done` | `instruction 수정 필요 -> 파일 이름이 줄바꿈으로 처리되도록 instruction 구체화` | `재작성 완료 Task 목록` |  |
+| 081 | `team3_terminal_record_working_directory` | `fix_needed` | `rewrite` |  | `todo` | `스크롤 기능 추가 필요, 리다이렉션 기능 추가 필요, 텍스트 커서 수정 필요, 문자 드래그 기능 추가 필요` | `미배치` |  |
+| 082 | `terminal_cat_and_save_config` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 083 | `terminal_cat_env_password` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 084 | `terminal_cat_log_error_code` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 085 | `terminal_list_log_directory` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 086 | `terminal_cat_csv_email` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 087 | `terminal_record_deep_pwd` | `drop` | `drop` |  | `done` | `81과 중복되는 task` | `폐기 Task 목록` |  |
+| 088 | `terminal_cat_hidden_credentials` | `fix_needed` | `rewrite` |  | `todo` | `비밀 파일 '.' 기능 추가 필요` | `미배치` |  |
+| 089 | `terminal_list_hidden_files` | `fix_needed` | `rewrite` |  | `todo` | `88과 동일` | `미배치` |  |
+| 090 | `terminal_cat_json_nested` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 091 | `terminal_cat_python_import` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 092 | `terminal_find_specific_extension` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일 + wildcard '*' 기능 추가 필요` | `미배치` |  |
+| 093 | `terminal_cat_csv_specific_value` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 094 | `terminal_cat_gitignore` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 095 | `terminal_find_backup_file` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일 + wildcard '*' 기능 추가 필요` | `미배치` |  |
+| 096 | `terminal_cat_package_json_version` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 097 | `terminal_find_shell_script` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일 + wildcard '*' 기능 추가 필요` | `미배치` |  |
+| 098 | `terminal_cat_process_list` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 099 | `terminal_cat_yaml_config` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
+| 100 | `terminal_cat_cert_expiry` | `fix_needed` | `rewrite` |  | `todo` | `81과 동일` | `미배치` |  |
 |  |  | `fix_needed` | `rewrite` |  | `todo` | 재작성 카드 작성 필요 | `미배치` |  |
 |  |  | `blocked` | `hold` |  | `done` | backlog 연결 필요 | `보류 Task 목록` |  |
 |  |  | `drop` | `drop` |  | `done` | 카탈로그 제거 | `폐기 Task 목록` |  |
@@ -160,25 +209,36 @@
 
 | No. | Task ID | 유지 근거 | 확인자 A | 확인자 B | 비고 |
 | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |
+| 051 | `rename_open_append_save` | 전수조사 `pass` |  |  |  |
+| 052 | `popup_then_rename_open` | 전수조사 `pass` |  |  |  |
+| 053 | `popup_then_copy_paste_save` | 전수조사 `pass` |  |  |  |
+| 054 | `popup_then_restore_append_save` | 전수조사 `pass`  |  |  |  |
+| 055 | `dock_launch_rename_then_open` | 전수조사 `pass`  |  |  |  |
+| 056 | `all_minimized_restore_append_save` | 전수조사 `pass` |  |  |  |
+| 057 | `popup_dock_launch_open_append_save` | 전수조사 `pass` |  |  |  |
+| 058 | `popup_rename_open_append_save` | 전수조사 `pass` |  |  |  |
+| 059 | `popup_all_minimized_restore_save` | 전수조사 `pass` |  |  |  |
+| 060 | `dock_launch_open_copy_paste_save` | 전수조사 `pass` |  |  |  |
 
 ### 재작성 완료 Task 목록
 
 | No. | Task ID | 수정 범위 | 검증 결과 | 담당자 | PR / Commit | 비고 |
 | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |  |
+| 080 | `terminal_list_directory_contents` | `instruction` — 파일 이름 줄바꿈 구분 명시 |  |  |  |  |
 
 ### 보류 Task 목록
 
 | No. | Task ID | blocker | 선행 작업 | backlog issue | 비고 |
 | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |
+| 069 | `mail_extract_messy_receipt_total` | 메일 뷰어 내 스크롤 기능 미구현 — 긴 본문 접근 불가 | 메일 앱 스크롤 기능 구현 |  |  |
+| 073 | `mail_extract_cancellation_fee` | 메일 뷰어 내 스크롤 기능 미구현 — 긴 본문 접근 불가 | 메일 앱 스크롤 기능 구현 |  |  |
+| 079 | `mail_extract_unsubscribe_link` | 메일 뷰어 내 스크롤 기능 미구현 — 긴 본문 접근 불가 | 메일 앱 스크롤 기능 구현 |  |  |
 
 ### 폐기 Task 목록
 
 | No. | Task ID | 폐기 이유 | 중복/대체 Task | 반영 방식 | 비고 |
 | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |
+| 087 | `terminal_record_deep_pwd` | `duplicate` — 081과 목적·수행 방식 동일 | `team3_terminal_record_working_directory` (081) | 카탈로그에서 087 제거 |  |
 
 ---
 
