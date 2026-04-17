@@ -50,12 +50,10 @@ done
 
 | Status | 의미 |
 | --- | --- |
-| `not_started` | 아직 시도 안 함 |
-| `pass` | 기대한 경로로 정상 완료 |
-| `pass_with_notes` | 완료는 됐지만 UX 이상, 헷갈림, 우회 필요 |
-| `fail` | 정상 완료 못 함 |
-| `blocked` | 환경 문제, 실행 문제, 재현 불가 등으로 판단 보류 |
-| `needs_recheck` | 한 번 보긴 했지만 확신 부족, 다시 확인 필요 |
+| `pass` | 현재 환경 기준에서 Task가 정상적으로 성립하며, 시각 구성/상호작용/instruction/evaluator 모두 큰 문제 없이 유지 가능 |
+| `fix_needed` | Task 자체는 유지할 가치가 있지만 시각, interaction, instruction, evaluator, maxSteps, setup 중 일부 수정 필요 |
+| `blocked` | 현재 앱 지원 범위나 환경 제약 때문에 선행 작업 없이 핵심 workflow를 재현하거나 복구하기 어려움 |
+| `drop` | 중복되거나 유지 가치가 낮아 현재 카탈로그에서 정리 대상 |
 
 권장 관찰 포인트:
 
@@ -75,18 +73,16 @@ done
 | Commit |  |
 | Default Seed | `0` |
 | Port | `4315` |
-| Notes |  |
+| Notes | 기존 Observed Result와 Freeform Notes를 1차 근거로 사용해 새 taxonomy로 재분류함. |
 
 ## Summary
 
 | Bucket | Count |
 | --- | --- |
 | `pass` | 0 |
-| `pass_with_notes` | 0 |
-| `fail` | 0 |
+| `fix_needed` | 19 |
 | `blocked` | 0 |
-| `needs_recheck` | 0 |
-| `not_started` | 20 |
+| `drop` | 1 |
 
 ## Per-Task Log
 
@@ -98,26 +94,26 @@ done
 
 | No. | Task ID | Seed | Status | Observed Result | Issue Type | Next Action |
 | --- | --- | --- | --- | --- | --- | --- |
-| 081 | `team3_terminal_record_working_directory` | `0` | `pass with notes` | `pwd기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 082 | `terminal_cat_and_save_config` | `0` | `pass with notes` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 083 | `terminal_cat_env_password` | `0` | `pass with notes` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 084 | `terminal_cat_log_error_code` | `0` | `pass with notes` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 085 | `terminal_list_log_directory` | `0` | `pass with notes` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
-| 086 | `terminal_cat_csv_email` | `0` | `pass with notes` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. 터미널 부분 드래그 선택 안돼서 해당 부분만 복사 붙여넣기 불가능` | `ux, terminal` | `bugfix` |
-| 087 | `terminal_record_deep_pwd` | `0` | `pass with notes` | `중복되는 task 제거 필요 81과 동일` | `none` | `none` |
-| 088 | `terminal_cat_hidden_credentials` | `0` | `pass with notes` | `ls 시 .** 파일들도 그냥 출력` | `terminal` | `bugfix` |
-| 089 | `terminal_list_hidden_files` | `0` | `pass with notes` | `ls 시 .** 파일들도 그냥 출력` | `terminal` | `bugfix` |
-| 090 | `terminal_cat_json_nested` | `0` | `pass with notes` | `공통 기능상 문제와 동일` | `terminal` | `bugfix` |
-| 091 | `terminal_cat_python_import` | `0` |  `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
-| 092 | `terminal_find_specific_extension` | `0` | `pass with notes` | `공통 기능상 문제와 동일, ls *.pdf 기능 x` | `terminal` | `bugfix` |
-| 093 | `terminal_cat_csv_specific_value` | `0` |  `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
-| 094 | `terminal_cat_gitignore` | `0` |  `pass with notes` | `공통 기능상 문제와 동일` | `terminal` | `bugfix` |
-| 095 | `terminal_find_backup_file` | `0` | `pass with notes` | `공통 기능상 문제와 동일, * 사용 불가능` | `terminal` | `bugfix` |
-| 096 | `terminal_cat_package_json_version` | `0` | `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
-| 097 | `terminal_find_shell_script` | `0` | `pass with notes` | `공통 기능상 문제와 동일, ls *.sh 기능 x` | `terminal` | `bugfix` |
-| 098 | `terminal_cat_process_list` | `0` | `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
-| 099 | `terminal_cat_yaml_config` | `0` | `pass with notes` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
-| 100 | `terminal_cat_cert_expiry` | `0` | `pass with notes` |`공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 081 | `team3_terminal_record_working_directory` | `0` | `fix_needed` | `pwd기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
+| 082 | `terminal_cat_and_save_config` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
+| 083 | `terminal_cat_env_password` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
+| 084 | `terminal_cat_log_error_code` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
+| 085 | `terminal_list_log_directory` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. ctrl+C, ctrl+v 하면 txt 파일에서 글씨 깨져서 보임` | `ux, terminal` | `bugfix` |
+| 086 | `terminal_cat_csv_email` | `0` | `fix_needed` | `cat, ls 기능 정상, txt 저장 가능. redirection 기능 없음. 하지만 명령을 여러번하면 terminal 작동 x, termianl 스크롤 안됨. 터미널 부분 드래그 선택 안돼서 해당 부분만 복사 붙여넣기 불가능` | `ux, terminal` | `bugfix` |
+| 087 | `terminal_record_deep_pwd` | `0` | `drop` | `중복되는 task 제거 필요 81과 동일` | `none` | `none` |
+| 088 | `terminal_cat_hidden_credentials` | `0` | `fix_needed` | `ls 시 .** 파일들도 그냥 출력` | `terminal` | `bugfix` |
+| 089 | `terminal_list_hidden_files` | `0` | `fix_needed` | `ls 시 .** 파일들도 그냥 출력` | `terminal` | `bugfix` |
+| 090 | `terminal_cat_json_nested` | `0` | `fix_needed` | `공통 기능상 문제와 동일` | `terminal` | `bugfix` |
+| 091 | `terminal_cat_python_import` | `0` | `fix_needed` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 092 | `terminal_find_specific_extension` | `0` | `fix_needed` | `공통 기능상 문제와 동일, ls *.pdf 기능 x` | `terminal` | `bugfix` |
+| 093 | `terminal_cat_csv_specific_value` | `0` | `fix_needed` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 094 | `terminal_cat_gitignore` | `0` | `fix_needed` | `공통 기능상 문제와 동일` | `terminal` | `bugfix` |
+| 095 | `terminal_find_backup_file` | `0` | `fix_needed` | `공통 기능상 문제와 동일, * 사용 불가능` | `terminal` | `bugfix` |
+| 096 | `terminal_cat_package_json_version` | `0` | `fix_needed` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 097 | `terminal_find_shell_script` | `0` | `fix_needed` | `공통 기능상 문제와 동일, ls *.sh 기능 x` | `terminal` | `bugfix` |
+| 098 | `terminal_cat_process_list` | `0` | `fix_needed` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 099 | `terminal_cat_yaml_config` | `0` | `fix_needed` | `공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
+| 100 | `terminal_cat_cert_expiry` | `0` | `fix_needed` |`공통 기능상 문제와 동일, 일부분 복사 불가` | `terminal` | `bugfix` |
 
 ## Freeform Notes
 

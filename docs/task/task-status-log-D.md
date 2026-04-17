@@ -50,12 +50,10 @@ done
 
 | Status | 의미 |
 | --- | --- |
-| `not_started` | 아직 시도 안 함 |
-| `pass` | 기대한 경로로 정상 완료 |
-| `pass_with_notes` | 완료는 됐지만 UX 이상, 헷갈림, 우회 필요 |
-| `fail` | 정상 완료 못 함 |
-| `blocked` | 환경 문제, 실행 문제, 재현 불가 등으로 판단 보류 |
-| `needs_recheck` | 한 번 보긴 했지만 확신 부족, 다시 확인 필요 |
+| `pass` | 현재 환경 기준에서 Task가 정상적으로 성립하며, 시각 구성/상호작용/instruction/evaluator 모두 큰 문제 없이 유지 가능 |
+| `fix_needed` | Task 자체는 유지할 가치가 있지만 시각, interaction, instruction, evaluator, maxSteps, setup 중 일부 수정 필요 |
+| `blocked` | 현재 앱 지원 범위나 환경 제약 때문에 선행 작업 없이 핵심 workflow를 재현하거나 복구하기 어려움 |
+| `drop` | 중복되거나 유지 가치가 낮아 현재 카탈로그에서 정리 대상 |
 
 권장 관찰 포인트:
 
@@ -75,18 +73,16 @@ done
 | Commit |  |
 | Default Seed | `0` |
 | Port | `4315` |
-| Notes |  |
+| Notes | 기존 Observed Result와 Freeform Notes를 1차 근거로 사용해 새 taxonomy로 재분류함. |
 
 ## Summary
 
 | Bucket | Count |
 | --- | --- |
 | `pass` | 0 |
-| `pass_with_notes` | 17 |
-| `fail` | 3 |
-| `blocked` | 0 |
-| `needs_recheck` | 0 |
-| `not_started` | 0 |
+| `fix_needed` | 17 |
+| `blocked` | 3 |
+| `drop` | 0 |
 
 ## Per-Task Log
 
@@ -98,26 +94,26 @@ done
 
 | No. | Task ID | Seed | Status | Observed Result | Issue Type | Next Action |
 | --- | --- | --- | --- | --- | --- | --- |
-| 061 | `mail_extract_invoice_amount` | `0` | `pass_with_notes` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
-| 062 | `mail_record_sender_address` | `0` | `pass_with_notes` | 정답(sender)이 헤더 영역에 위치해 스크롤 범위 밖, 선택·복사 불가, 직접 입력으로 완료 | `ux` | `bugfix` |
-| 063 | `mail_extract_reset_link` | `0` | `pass_with_notes` | 메일 하단이 잘려 URL 끝부분 확인 불가(스크롤 안 됨), 정답 값 직접 입력 시 성공 | `mail` | `bugfix` |
-| 064 | `mail_extract_meeting_time` | `0` | `pass_with_notes` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
-| 065 | `mail_extract_tracking_info` | `0` | `pass_with_notes` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
-| 066 | `mail_extract_spam_sender` | `0` | `pass_with_notes` | 폴더 클릭 오프셋으로 처음엔 선택 안 됐으나 재시도로 성공. 블록 복사 우회 가능했으나 직접 입력으로 완료 | `mail` | `bugfix` |
-| 067 | `mail_extract_2fa_code` | `0` | `pass_with_notes` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
-| 068 | `mail_extract_trash_link` | `0` | `pass_with_notes` | Trash folder 클릭 불안정(반복 클릭 후 간신히 선택됨), 복사 불가, 직접 입력으로 완료. 066과 동일 계열 버그로 추정 | `mail` | `bugfix` |
-| 069 | `mail_extract_messy_receipt_total` | `0` | `fail` | 메일 스크롤 불가로 하단 내용 확인 불가, 태스크 진행 불가 | `mail` | `bugfix` |
-| 070 | `mail_extract_flight_pnr` | `0` | `pass_with_notes` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
-| 071 | `mail_extract_exception_name` | `0` | `pass_with_notes` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
-| 072 | `mail_extract_ssh_ip` | `0` | `pass_with_notes` | 스크롤로 블록 단위 복사 가능 발견, 문자 단위 선택 불가, 메일 하단 여전히 안 보임. 복붙 후 앞부분 잘라내는 방식으로 완료 | `ux` | `bugfix` |
-| 073 | `mail_extract_cancellation_fee` | `0` | `fail` | 메일 스크롤 불가로 cancellation fee 확인 불가, 태스크 진행 불가 | `mail` | `bugfix` |
-| 074 | `mail_extract_hr_phone` | `0` | `pass_with_notes` | 직접 입력으로 완료. 블록 복붙 후 앞부분 편집 시도했으나 커서 위치 오프셋 + 줄 넘김 클릭 불가로 실용적이지 않음 (정답은 message body 안에 있어 블록 복사 우회 가능했음) | `ux` | `bugfix` |
-| 075 | `mail_extract_draft_recipient` | `0` | `pass_with_notes` | 블록 복사 후 앞부분 제거 방식으로 완료. 폴더 선택 시 실제 목표보다 아래를 클릭해야 선택되는 클릭 오프셋 문제 있음 | `ux` | `bugfix` |
-| 076 | `mail_extract_promo_code` | `0` | `pass_with_notes` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 | `ux` | `bugfix` |
-| 077 | `mail_extract_deadline` | `0` | `pass_with_notes` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 | `ux` | `bugfix` |
-| 078 | `mail_extract_rebooked_flight` | `0` | `pass_with_notes` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 | `ux` | `bugfix` |
-| 079 | `mail_extract_unsubscribe_link` | `0` | `fail` | 메일 스크롤 불가로 하단 링크 확인 불가, 태스크 진행 불가 | `mail` | `bugfix` |
-| 080 | `terminal_list_directory_contents` | `0` | `pass_with_notes` | 성공. instruction에 파일명을 줄바꿈으로 구분해야 한다는 설명 누락, 공백 구분으로 입력 시 실패 | `instruction` | `clarify_instruction` |
+| 061 | `mail_extract_invoice_amount` | `0` | `fix_needed` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
+| 062 | `mail_record_sender_address` | `0` | `fix_needed` | 정답(sender)이 헤더 영역에 위치해 스크롤 범위 밖, 선택·복사 불가, 직접 입력으로 완료 | `ux` | `bugfix` |
+| 063 | `mail_extract_reset_link` | `0` | `fix_needed` | 메일 하단이 잘려 URL 끝부분 확인 불가(스크롤 안 됨), 정답 값 직접 입력 시 성공 | `mail` | `bugfix` |
+| 064 | `mail_extract_meeting_time` | `0` | `fix_needed` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
+| 065 | `mail_extract_tracking_info` | `0` | `fix_needed` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
+| 066 | `mail_extract_spam_sender` | `0` | `fix_needed` | 폴더 클릭 오프셋으로 처음엔 선택 안 됐으나 재시도로 성공. 블록 복사 우회 가능했으나 직접 입력으로 완료 | `mail` | `bugfix` |
+| 067 | `mail_extract_2fa_code` | `0` | `fix_needed` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
+| 068 | `mail_extract_trash_link` | `0` | `fix_needed` | Trash folder 클릭 불안정(반복 클릭 후 간신히 선택됨), 복사 불가, 직접 입력으로 완료. 066과 동일 계열 버그로 추정 | `mail` | `bugfix` |
+| 069 | `mail_extract_messy_receipt_total` | `0` | `blocked` | 메일 스크롤 불가로 하단 내용 확인 불가, 태스크 진행 불가 | `mail` | `bugfix` |
+| 070 | `mail_extract_flight_pnr` | `0` | `fix_needed` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
+| 071 | `mail_extract_exception_name` | `0` | `fix_needed` | 블록 복사 우회 가능했으나 직접 입력으로 완료 | `ux` | `bugfix` |
+| 072 | `mail_extract_ssh_ip` | `0` | `fix_needed` | 스크롤로 블록 단위 복사 가능 발견, 문자 단위 선택 불가, 메일 하단 여전히 안 보임. 복붙 후 앞부분 잘라내는 방식으로 완료 | `ux` | `bugfix` |
+| 073 | `mail_extract_cancellation_fee` | `0` | `blocked` | 메일 스크롤 불가로 cancellation fee 확인 불가, 태스크 진행 불가 | `mail` | `bugfix` |
+| 074 | `mail_extract_hr_phone` | `0` | `fix_needed` | 직접 입력으로 완료. 블록 복붙 후 앞부분 편집 시도했으나 커서 위치 오프셋 + 줄 넘김 클릭 불가로 실용적이지 않음 (정답은 message body 안에 있어 블록 복사 우회 가능했음) | `ux` | `bugfix` |
+| 075 | `mail_extract_draft_recipient` | `0` | `fix_needed` | 블록 복사 후 앞부분 제거 방식으로 완료. 폴더 선택 시 실제 목표보다 아래를 클릭해야 선택되는 클릭 오프셋 문제 있음 | `ux` | `bugfix` |
+| 076 | `mail_extract_promo_code` | `0` | `fix_needed` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 | `ux` | `bugfix` |
+| 077 | `mail_extract_deadline` | `0` | `fix_needed` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 | `ux` | `bugfix` |
+| 078 | `mail_extract_rebooked_flight` | `0` | `fix_needed` | 블록 복사 후 불필요한 텍스트 제거 방식으로 완료. 백스페이스 연타 후 지연 입력이 다음 작업에 영향, 새로고침으로 해소 | `ux` | `bugfix` |
+| 079 | `mail_extract_unsubscribe_link` | `0` | `blocked` | 메일 스크롤 불가로 하단 링크 확인 불가, 태스크 진행 불가 | `mail` | `bugfix` |
+| 080 | `terminal_list_directory_contents` | `0` | `fix_needed` | 성공. instruction에 파일명을 줄바꿈으로 구분해야 한다는 설명 누락, 공백 구분으로 입력 시 실패 | `instruction` | `clarify_instruction` |
 
 ## Freeform Notes
 
@@ -131,7 +127,7 @@ done
 
 ### [메일 뷰어] 긴 본문 스크롤 불가 / 하단 내용 잘림
 
-영향 태스크: 063(`pass_with_notes`), 069(`fail`), 073(`fail`), 079(`fail`)
+영향 태스크: 063(`fix_needed`), 069(`blocked`), 073(`blocked`), 079(`blocked`)
 
 메일 본문이 길 경우 뷰어 하단이 잘리고 스크롤이 되지 않음. 정답이 하단에 있는 경우 화면에서 확인 자체가 불가능해 직접 입력 우회도 막힘. 063은 정답 형식을 추론해 직접 입력하여 우회 성공, 나머지 3건은 실패.
 

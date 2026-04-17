@@ -50,12 +50,10 @@ done
 
 | Status | 의미 |
 | --- | --- |
-| `not_started` | 아직 시도 안 함 |
-| `pass` | 기대한 경로로 정상 완료 |
-| `pass_with_notes` | 완료는 됐지만 UX 이상, 헷갈림, 우회 필요 |
-| `fail` | 정상 완료 못 함 |
-| `blocked` | 환경 문제, 실행 문제, 재현 불가 등으로 판단 보류 |
-| `needs_recheck` | 한 번 보긴 했지만 확신 부족, 다시 확인 필요 |
+| `pass` | 현재 환경 기준에서 Task가 정상적으로 성립하며, 시각 구성/상호작용/instruction/evaluator 모두 큰 문제 없이 유지 가능 |
+| `fix_needed` | Task 자체는 유지할 가치가 있지만 시각, interaction, instruction, evaluator, maxSteps, setup 중 일부 수정 필요 |
+| `blocked` | 현재 앱 지원 범위나 환경 제약 때문에 선행 작업 없이 핵심 workflow를 재현하거나 복구하기 어려움 |
+| `drop` | 중복되거나 유지 가치가 낮아 현재 카탈로그에서 정리 대상 |
 
 권장 관찰 포인트:
 
@@ -75,18 +73,16 @@ done
 | Commit |  |
 | Default Seed | `0` |
 | Port | `4315` |
-| Notes |  |
+| Notes | 기존 Observed Result와 Freeform Notes를 1차 근거로 사용해 새 taxonomy로 재분류함. |
 
 ## Summary
 
 | Bucket | Count |
 | --- | --- |
 | `pass` | 19 |
-| `pass_with_notes` | 0 |
-| `fail` | 1 |
+| `fix_needed` | 1 |
 | `blocked` | 0 |
-| `needs_recheck` | 0 |
-| `not_started` | 0 |
+| `drop` | 0 |
 
 ## Per-Task Log
 
@@ -107,7 +103,7 @@ done
 | 047 | `rename_then_open_among_three` | `0` | `pass` | The correct file was renamed among three options and then opened successfully. | `none` | `none` |
 | 048 | `popup_then_rename_among_three` | `0` | `pass` | The popup was dismissed and the correct file was renamed successfully among three options. | `none` | `none` |
 | 049 | `dock_launch_rename_among_three` | `0` | `pass` | Files app was launched from the dock and the correct file was renamed successfully among three options. | `none` | `none` |
-| 050 | `restore_among_three_then_save` | `0` | `fail` | Only two text files were present from the start, and clicking the alpha document from the dock opened delta instead. | `window` | `bugfix` |
+| 050 | `restore_among_three_then_save` | `0` | `fix_needed` | Only two text files were present from the start, and clicking the alpha document from the dock opened delta instead. | `window` | `bugfix` |
 | 051 | `rename_open_append_save` | `0` | `pass` | The file was renamed, opened, updated with the requested text, and saved successfully. | `none` | `none` |
 | 052 | `popup_then_rename_open` | `0` | `pass` | The popup was dismissed, the file was renamed, and the renamed file was opened successfully. | `none` | `none` |
 | 053 | `popup_then_copy_paste_save` | `0` | `pass` | The popup was dismissed, content was copied between editors, pasted into the target note, and saved successfully. | `none` | `none` |
