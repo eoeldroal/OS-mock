@@ -81,12 +81,12 @@ done
 
 | Bucket | Count |
 | --- | --- |
-| `pass` | 0 |
+| `pass` | 19 |
 | `pass_with_notes` | 0 |
-| `fail` | 0 |
+| `fail` | 1 |
 | `blocked` | 0 |
 | `needs_recheck` | 0 |
-| `not_started` | 20 |
+| `not_started` | 0 |
 
 ## Per-Task Log
 
@@ -98,26 +98,26 @@ done
 
 | No. | Task ID | Seed | Status | Observed Result | Issue Type | Next Action |
 | --- | --- | --- | --- | --- | --- | --- |
-| 041 | `popup_then_restore_save` | `0` | `not_started` |  | `none` | `none` |
-| 042 | `restore_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 043 | `dock_launch_open_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 044 | `all_minimized_restore_and_save` | `0` | `not_started` |  | `none` | `none` |
-| 045 | `popup_then_dock_launch_open` | `0` | `not_started` |  | `none` | `none` |
-| 046 | `copy_line_paste_save` | `0` | `not_started` |  | `none` | `none` |
-| 047 | `rename_then_open_among_three` | `0` | `not_started` |  | `none` | `none` |
-| 048 | `popup_then_rename_among_three` | `0` | `not_started` |  | `none` | `none` |
-| 049 | `dock_launch_rename_among_three` | `0` | `not_started` |  | `none` | `none` |
-| 050 | `restore_among_three_then_save` | `0` | `not_started` |  | `none` | `none` |
-| 051 | `rename_open_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 052 | `popup_then_rename_open` | `0` | `not_started` |  | `none` | `none` |
-| 053 | `popup_then_copy_paste_save` | `0` | `not_started` |  | `none` | `none` |
-| 054 | `popup_then_restore_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 055 | `dock_launch_rename_then_open` | `0` | `not_started` |  | `none` | `none` |
-| 056 | `all_minimized_restore_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 057 | `popup_dock_launch_open_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 058 | `popup_rename_open_append_save` | `0` | `not_started` |  | `none` | `none` |
-| 059 | `popup_all_minimized_restore_save` | `0` | `not_started` |  | `none` | `none` |
-| 060 | `dock_launch_open_copy_paste_save` | `0` | `not_started` |  | `none` | `none` |
+| 041 | `popup_then_restore_save` | `0` | `pass` | Popup dismissed, editor restored, and save completed successfully. | `none` | `none` |
+| 042 | `restore_append_save` | `0` | `pass` | Hidden editor was restored, text was appended, and save completed successfully. | `none` | `none` |
+| 043 | `dock_launch_open_append_save` | `0` | `pass` | Files app was launched from the dock, target file was opened, requested text was appended, and save completed successfully. | `none` | `none` |
+| 044 | `all_minimized_restore_and_save` | `0` | `pass` | The correct editor was restored from the all-minimized state and the file was saved successfully. | `none` | `none` |
+| 045 | `popup_then_dock_launch_open` | `0` | `pass` | Popup was dismissed, Files app was launched from the dock, and the target file was opened successfully. | `none` | `none` |
+| 046 | `copy_line_paste_save` | `0` | `pass` | A line was copied between editors, pasted into the target note, and the file was saved successfully. | `none` | `none` |
+| 047 | `rename_then_open_among_three` | `0` | `pass` | The correct file was renamed among three options and then opened successfully. | `none` | `none` |
+| 048 | `popup_then_rename_among_three` | `0` | `pass` | The popup was dismissed and the correct file was renamed successfully among three options. | `none` | `none` |
+| 049 | `dock_launch_rename_among_three` | `0` | `pass` | Files app was launched from the dock and the correct file was renamed successfully among three options. | `none` | `none` |
+| 050 | `restore_among_three_then_save` | `0` | `fail` | Only two text files were present from the start, and clicking the alpha document from the dock opened delta instead. | `window` | `bugfix` |
+| 051 | `rename_open_append_save` | `0` | `pass` | The file was renamed, opened, updated with the requested text, and saved successfully. | `none` | `none` |
+| 052 | `popup_then_rename_open` | `0` | `pass` | The popup was dismissed, the file was renamed, and the renamed file was opened successfully. | `none` | `none` |
+| 053 | `popup_then_copy_paste_save` | `0` | `pass` | The popup was dismissed, content was copied between editors, pasted into the target note, and saved successfully. | `none` | `none` |
+| 054 | `popup_then_restore_append_save` | `0` | `pass` | The popup was dismissed, the editor was restored, text was appended, and the file was saved successfully. | `none` | `none` |
+| 055 | `dock_launch_rename_then_open` | `0` | `pass` | Files app was launched from the dock, the correct file was renamed, and the renamed file was opened successfully. | `none` | `none` |
+| 056 | `all_minimized_restore_append_save` | `0` | `pass` | The correct editor was restored from the all-minimized state, text was appended, and the file was saved successfully. | `none` | `none` |
+| 057 | `popup_dock_launch_open_append_save` | `0` | `pass` | The popup was dismissed, Files app was launched from the dock, the target file was opened, text was appended, and the file was saved successfully. | `none` | `none` |
+| 058 | `popup_rename_open_append_save` | `0` | `pass` | The popup was dismissed, the file was renamed, opened, updated with the requested text, and saved successfully. | `none` | `none` |
+| 059 | `popup_all_minimized_restore_save` | `0` | `pass` | The popup and all-minimized state were handled, the correct editor was restored, and the file was saved successfully. | `none` | `none` |
+| 060 | `dock_launch_open_copy_paste_save` | `0` | `pass` | Files app was launched from the dock, two files were opened, content was copied and pasted between them, and the target file was saved successfully. | `none` | `none` |
 
 ## Freeform Notes
 
@@ -131,4 +131,4 @@ done
 
 ### Viewer or Runtime Oddities
 
-- 
+- In `050 restore_among_three_then_save`, only two text files appeared even though the scenario implies three candidate editors, and clicking the alpha document from the dock opened delta instead.
