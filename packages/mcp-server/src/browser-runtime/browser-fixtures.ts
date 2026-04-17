@@ -335,13 +335,6 @@ export function resolveBrowserFixtureUrl(url: string, baseUrl: string) {
   return url.replace("osmock://browser-fixtures", `${normalizedBase}/browser-fixtures`);
 }
 
-export function extractBrowserFixtureId(url: string) {
-  if (!isBrowserFixtureUrl(url)) {
-    return undefined;
-  }
-  return url.replace("osmock://browser-fixtures/", "").split(/[?#]/)[0] || undefined;
-}
-
 export function renderBrowserFixturePage(fixtureId: string) {
   if (fixtureId === "start") {
     return renderStartFixture();

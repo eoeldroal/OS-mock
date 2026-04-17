@@ -18,7 +18,6 @@ type CliOptions = {
 
 type CallToolResult = {
   content?: Array<{ type?: string; text?: string }>;
-  isError?: boolean;
 };
 
 type SessionContext = {
@@ -136,8 +135,7 @@ class ActionLogger {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "../../../..");
-const sourceServerEntry = resolve(rootDir, "packages/mcp-server/src/index.ts");
-const builtServerEntry = resolve(rootDir, "packages/mcp-server/dist/index.js");
+const serverEntry = resolve(rootDir, "packages/mcp-server/dist/index.js");
 
 function parseCliArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
@@ -189,38 +187,7 @@ function parseToolText(result: CallToolResult) {
   if (!text) {
     throw new Error("Tool result did not contain text content.");
   }
-
-  if (result.isError) {
-    throw new Error(text);
-  }
-
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new Error(text);
-  }
-}
-
-function resolveServerLaunch() {
-  if (existsSync(sourceServerEntry)) {
-    return {
-      command: process.execPath,
-      args: ["--import", "tsx", sourceServerEntry],
-      label: sourceServerEntry
-    };
-  }
-
-  if (existsSync(builtServerEntry)) {
-    return {
-      command: process.execPath,
-      args: [builtServerEntry],
-      label: builtServerEntry
-    };
-  }
-
-  throw new Error(
-    `OS mock MCP server was not found at ${sourceServerEntry} or ${builtServerEntry}.`
-  );
+  return JSON.parse(text) as unknown;
 }
 
 function decodeEscapes(text: string) {
@@ -312,14 +279,16 @@ async function createSession(client: Client) {
 
 async function main() {
   const options = parseCliArgs(process.argv.slice(2));
-  const serverLaunch = resolveServerLaunch();
+  if (!existsSync(serverEntry)) {
+    throw new Error(`Built MCP server not found at ${serverEntry}. Run npm run build first.`);
+  }
 
   const logger = new ActionLogger();
   console.log(`Action log: ${logger.getPath()}`);
 
   const transport = new StdioClientTransport({
-    command: serverLaunch.command,
-    args: serverLaunch.args,
+    command: process.execPath,
+    args: [serverEntry],
     cwd: rootDir,
     env: {
       ...process.env,
@@ -349,7 +318,6 @@ async function main() {
     await client.connect(transport);
     const tools = await client.listTools();
     console.log(`Connected. ${tools.tools.length} MCP tools available.`);
-    console.log(`Server:  ${serverLaunch.label}`);
 
     session = await createSession(client);
     logger.setSession(session.sessionId);
@@ -718,6 +686,6 @@ function toAction(command: string, args: string[]): Computer13Action | null {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(error);
   process.exit(1);
 });
