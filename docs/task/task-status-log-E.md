@@ -130,7 +130,7 @@ done
 - `드래그 기능 작동 x`
 - `방향키 기능 x`
 - `Redirection을 사용한 수행 불가`
-
+- `ls -al 과 같은 option 기능 없음`
 ### Ambiguous Instructions
 
 - 
