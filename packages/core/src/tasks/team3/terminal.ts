@@ -34,7 +34,7 @@ export const terminalListDirTask: TaskSpec = defineTeam3Task({
   split: "starter",
   domain: TEAM3_TERMINAL_DOMAIN,
   instruction:
-    "Open Terminal, run 'ls' to list the files in the current directory, and record the file names into a note called 'dir_contents.txt', then save it.",
+    "Open Terminal, run 'ls' to list the files in the current directory, and record the file names separated by newlines into a note called 'dir_contents.txt', then save it.",
   maxSteps: 15,
   setup: (seed: number, viewport: Viewport) => {
     const dirVariants = [
@@ -50,7 +50,7 @@ export const terminalListDirTask: TaskSpec = defineTeam3Task({
     return buildLsTerminalTask(
       {
         instruction:
-          "Open Terminal, run 'ls' to list the files in the current directory, and record the file names into a note called 'dir_contents.txt', then save it.",
+          "Open Terminal, run 'ls' to list the files in the current directory, and record the file names separated by newlines into a note called 'dir_contents.txt', then save it.",
         viewport,
         cwd: variant.cwd,
         noteTarget: createTeam3NoteTarget("team3-t2-dir-note", "dir_contents.txt"),
